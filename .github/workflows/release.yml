@@ -14,23 +14,29 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+env:
+  VERSION: ${{ inputs.version }}
+  TARBALL: gatherdeal-sdk-${{ inputs.version }}.tgz
+
 jobs:
-  build:
-    name: verify, test and pack
+  pack:
+    name: verify and pack
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
-      sha: ${{ steps.version.outputs.sha }}
-      tag: ${{ steps.version.outputs.tag }}
-    env:
-      VERSION: ${{ inputs.version }}
+      digest: ${{ steps.pack.outputs.digest }}
+      dist-tag: ${{ steps.version.outputs.dist-tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
       - id: version
         name: version matches package.json and is unreleased
         run: |
@@ -44,8 +50,67 @@ jobs:
           if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
             echo "tag v$VERSION exists" >&2; exit 1
           fi
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "tag=$(if [[ "$VERSION" == *-* ]]; then echo next; else echo latest; fi)" >> "$GITHUB_OUTPUT"
+          echo "dist-tag=$(if [[ "$VERSION" == *-* ]]; then echo next; else echo latest; fi)" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - name: generated modules are byte-identical to the published set
+        run: node scripts/generated.mjs verify-remote
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - id: pack
+        name: pack once and record the digest
+        run: |
+          mkdir "$RUNNER_TEMP/pack"
+          npm pack --pack-destination "$RUNNER_TEMP/pack"
+          echo "digest=$(sha256sum "$RUNNER_TEMP/pack/$TARBALL" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: packed repository.url names this repository
+        run: |
+          tar -xzOf "$RUNNER_TEMP/pack/$TARBALL" package/package.json | node -e '
+            let text = "";
+            process.stdin.on("data", (c) => (text += c)).on("end", () => {
+              const url = JSON.parse(text).repository?.url ?? "";
+              const normalized = url.replace(/^git\+/, "").replace(/\.git$/, "").toLowerCase();
+              const want = `https://github.com/${process.env.GITHUB_REPOSITORY}`.toLowerCase();
+              if (normalized !== want) {
+                console.error(`repository.url is "${url}", want ${want}`);
+                process.exit(1);
+              }
+            });
+          '
+      - name: release notes
+        run: |
+          mkdir "$RUNNER_TEMP/notes"
+          previous="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+          if [ -n "$previous" ]; then
+            git show "$previous:generated.lock.json" > "$RUNNER_TEMP/previous.lock.json"
+            node scripts/generated.mjs notes --from "$RUNNER_TEMP/previous.lock.json" > "$RUNNER_TEMP/notes/notes.md"
+          else
+            node scripts/generated.mjs notes > "$RUNNER_TEMP/notes/notes.md"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tarball
+          path: ${{ runner.temp }}/pack/${{ env.TARBALL }}
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes/notes.md
+          if-no-files-found: error
+
+  test:
+    name: test the packed tarball
+    needs: pack
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      DIGEST: ${{ needs.pack.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -55,46 +120,29 @@ jobs:
       - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.x
-      - run: npm ci
-      - name: generated modules are byte-identical to the published set
-        run: node scripts/generated.mjs verify-remote
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - name: pack
-        run: |
-          mkdir release
-          npm pack --pack-destination release
-          (cd release && sha256sum "gatherdeal-sdk-$VERSION.tgz" > SHA256SUMS)
-      - name: test the packed tarball
-        run: |
-          npm install --no-save --no-audit --no-fund miniflare@4.20260730.0
-          node scripts/smoke.mjs node bun deno types workerd --tarball "release/gatherdeal-sdk-$VERSION.tgz"
-      - name: release notes
-        run: |
-          previous="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
-          if [ -n "$previous" ]; then
-            git show "$previous:generated.lock.json" > "$RUNNER_TEMP/previous.lock.json"
-            node scripts/generated.mjs notes --from "$RUNNER_TEMP/previous.lock.json" > release/notes.md
-          else
-            node scripts/generated.mjs notes > release/notes.md
-          fi
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release
-          path: release/
-          if-no-files-found: error
+          name: tarball
+          path: ${{ runner.temp }}/artifact
+      - name: tarball digest matches the pack job
+        run: echo "$DIGEST  $RUNNER_TEMP/artifact/$TARBALL" | sha256sum -c
+      - run: npm ci
+      - run: npm ci --prefix smoke
+      - run: npx playwright-core install --with-deps chromium
+        working-directory: smoke
+      - run: node scripts/smoke.mjs node bun deno types tests workerd chromium --tarball "$RUNNER_TEMP/artifact/$TARBALL"
 
   publish:
     name: publish to npm
-    needs: build
+    needs: [pack, test]
     runs-on: ubuntu-24.04
     environment: release
     permissions:
       contents: read
       id-token: write # npm trusted publishing with provenance
     env:
-      VERSION: ${{ inputs.version }}
+      DIGEST: ${{ needs.pack.outputs.digest }}
+      DIST_TAG: ${{ needs.pack.outputs.dist-tag }}
     steps:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -102,33 +150,39 @@ jobs:
           registry-url: https://registry.npmjs.org
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release
-          path: release
+          name: tarball
+          path: ${{ runner.temp }}/artifact
       - name: publish the tested tarball
-        working-directory: release
+        working-directory: ${{ runner.temp }}/artifact
         run: |
-          sha256sum -c SHA256SUMS
-          npm publish "./gatherdeal-sdk-$VERSION.tgz" --provenance --access public --ignore-scripts \
-            --tag "${{ needs.build.outputs.tag }}"
+          echo "$DIGEST  $TARBALL" | sha256sum -c
+          npm publish "./$TARBALL" --provenance --access public --ignore-scripts --tag "$DIST_TAG"
 
   github-release:
     name: tag and GitHub release
-    needs: [build, publish]
+    needs: [pack, publish]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
-      VERSION: ${{ inputs.version }}
+      DIGEST: ${{ needs.pack.outputs.digest }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release
-          path: release
+          name: tarball
+          path: ${{ runner.temp }}/artifact
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes
       - name: create the tag and release
         run: |
+          cd "$RUNNER_TEMP/artifact"
+          echo "$DIGEST  $TARBALL" | sha256sum -c
+          echo "$DIGEST  $TARBALL" > SHA256SUMS
           prerelease=""
           if [[ "$VERSION" == *-* ]]; then prerelease="--prerelease"; fi
-          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "${{ needs.build.outputs.sha }}" \
-            --title "v$VERSION" --notes-file release/notes.md $prerelease \
-            "release/gatherdeal-sdk-$VERSION.tgz" release/SHA256SUMS
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes/notes.md" $prerelease \
+            "$TARBALL" SHA256SUMS

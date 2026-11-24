@@ -41,10 +41,10 @@ jobs:
         include:
           - name: node 22
             node: 22
-            runtimes: node types
+            runtimes: node types tests
           - name: node 24
             node: 24
-            runtimes: node types
+            runtimes: node types tests
           - name: bun
             node: 24
             runtimes: bun
@@ -81,13 +81,12 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
-      - run: npm install --no-save --no-audit --no-fund miniflare@4.20260730.0
+      - run: npm ci --prefix smoke
       - run: node scripts/smoke.mjs workerd
 
   chromium:
-    name: Chromium cross-origin preflight (pending production CORS)
+    name: packed tarball in Chromium, cross-origin
     runs-on: ubuntu-24.04
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -96,5 +95,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      - run: npm ci --prefix smoke
       - run: npx playwright-core install --with-deps chromium
+        working-directory: smoke
       - run: node scripts/smoke.mjs chromium

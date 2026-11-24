@@ -13,16 +13,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  sync:
+  fetch:
+    name: fetch and verify
     runs-on: ubuntu-24.04
     permissions:
-      contents: write # push the sync branch
-      pull-requests: write # open or update the pull request
-      actions: write # dispatch ci on the sync branch
-    env:
-      BRANCH: sync/generated
+      contents: read
+    outputs:
+      changed: ${{ steps.result.outputs.changed }}
+      title: ${{ steps.result.outputs.title }}
+      sha: ${{ steps.base.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -31,32 +37,76 @@ jobs:
       - id: result
         name: read the result
         run: |
+          mkdir -p "$RUNNER_TEMP/update"
           node -e '
             const r = require(process.argv[1]);
             const fs = require("node:fs");
-            fs.writeFileSync(process.env.RUNNER_TEMP + "/body.md", r.body);
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/update/body.md", r.body);
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `changed=${r.changed}\ntitle=${r.title}\n`);
           ' "$RUNNER_TEMP/sync.json"
-      - name: check the updated files
+      - name: collect the update
         if: steps.result.outputs.changed == 'true'
-        run: node scripts/generated.mjs check
-      - name: push the branch and open or update the pull request
+        run: |
+          node scripts/generated.mjs check
+          cp -R src/generated "$RUNNER_TEMP/update/generated"
+          cp generated.lock.json "$RUNNER_TEMP/update/generated.lock.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.result.outputs.changed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TITLE: ${{ steps.result.outputs.title }}
+        with:
+          name: sync-update
+          path: ${{ runner.temp }}/update/
+          if-no-files-found: error
+
+  pull-request:
+    name: open or update the pull request
+    needs: fetch
+    if: needs.fetch.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # push the sync branch
+      pull-requests: write # open or update the pull request
+      actions: write # dispatch ci on the sync branch
+    env:
+      BRANCH: sync/generated
+      BASE_SHA: ${{ needs.fetch.outputs.sha }}
+      TITLE: ${{ needs.fetch.outputs.title }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.fetch.outputs.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sync-update
+          path: ${{ runner.temp }}/update
+      - name: apply and verify the update
+        run: |
+          rm -rf src/generated
+          cp -R "$RUNNER_TEMP/update/generated" src/generated
+          cp "$RUNNER_TEMP/update/generated.lock.json" generated.lock.json
+          node scripts/generated.mjs check
+      - name: commit on a fresh branch and check the whole diff
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git add src/generated generated.lock.json
+          git add -A
           git commit -m "$TITLE"
+          outside="$(git diff --name-only "$BASE_SHA" HEAD | grep -Ev '^(src/generated/.+|generated\.lock\.json)$' || true)"
+          if [ -n "$outside" ]; then
+            echo "changes outside the allowlist:" >&2; echo "$outside" >&2; exit 1
+          fi
+      - name: push the branch and open or update the pull request
+        run: |
           git push --force origin "HEAD:refs/heads/$BRANCH"
           number="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [ -z "$number" ]; then
             gh pr create --base "${{ github.event.repository.default_branch }}" --head "$BRANCH" \
-              --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+              --title "$TITLE" --body-file "$RUNNER_TEMP/update/body.md"
           else
-            gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/body.md"
+            gh pr edit "$number" --title "$TITLE" --body-file "$RUNNER_TEMP/update/body.md"
           fi
           gh workflow run ci.yml --ref "$BRANCH"
