@@ -1,0 +1,52 @@
+{
+  "name": "@gatherdeal/sdk",
+  "version": "0.1.0",
+  "description": "GatherDeal API client for browsers, Node.js, Bun, Deno and Cloudflare Workers.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./crm": {
+      "types": "./dist/crm.d.ts",
+      "default": "./dist/crm.js"
+    },
+    "./identity": {
+      "types": "./dist/identity.d.ts",
+      "default": "./dist/identity.js"
+    },
+    "./whatsapp": {
+      "types": "./dist/whatsapp.d.ts",
+      "default": "./dist/whatsapp.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "node scripts/generated.mjs check && npm run build && publint --strict && attw --pack . --profile esm-only",
+    "test": "rm -rf build && tsc -p tsconfig.test.json && node --test build/test/",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "keywords": [
+    "gatherdeal",
+    "api",
+    "sdk"
+  ],
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@types/node": "26.6.6",
+    "publint": "0.3.25",
+    "typescript": "7.0.2"
+  }
+}

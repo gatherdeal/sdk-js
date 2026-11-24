@@ -1,0 +1,144 @@
+{
+  "format_version": 1,
+  "set": "sha256:50a1d5c1c6120ec48e8c5872467e67238dcb293ba92ae40736b7e36cd2afb533",
+  "services": [
+    {
+      "service": "crm",
+      "version": "v1",
+      "contract_sha256": "a1cec1d2f5498b975ac04fb25c8716bbd8d5be6caa6d037729fa680bff615424",
+      "public_ids": [
+        "crm.contact_logs.create",
+        "crm.contact_logs.list",
+        "crm.contact_tags.assign",
+        "crm.contact_tags.list",
+        "crm.contact_tags.remove",
+        "crm.contacts.create",
+        "crm.contacts.get",
+        "crm.contacts.list",
+        "crm.contacts.update",
+        "crm.deals.create",
+        "crm.deals.get",
+        "crm.deals.list",
+        "crm.deals.move_stage",
+        "crm.deals.update",
+        "crm.sales_pipelines.list"
+      ]
+    },
+    {
+      "service": "identity",
+      "version": "v1",
+      "contract_sha256": "2ea3c1afc96d36024844a010b37bf777f72021e10500d74f370982b22b92b474",
+      "public_ids": [
+        "identity.outlets.list"
+      ]
+    },
+    {
+      "service": "whatsapp",
+      "version": "v1",
+      "contract_sha256": "54039bc710c3fa8394a018832b433add33d9eb9fedd446fbd4b21d8f160bc68c",
+      "public_ids": [
+        "whatsapp.agents.create",
+        "whatsapp.agents.delete",
+        "whatsapp.agents.get",
+        "whatsapp.agents.list",
+        "whatsapp.agents.pairing",
+        "whatsapp.agents.update",
+        "whatsapp.broadcast_suppressions.add",
+        "whatsapp.broadcast_suppressions.delete",
+        "whatsapp.broadcast_suppressions.list",
+        "whatsapp.broadcasts.cancel",
+        "whatsapp.broadcasts.create",
+        "whatsapp.broadcasts.get",
+        "whatsapp.broadcasts.list",
+        "whatsapp.broadcasts.pause",
+        "whatsapp.broadcasts.recipients.add",
+        "whatsapp.broadcasts.recipients.delete",
+        "whatsapp.broadcasts.recipients.list",
+        "whatsapp.broadcasts.resume",
+        "whatsapp.broadcasts.start",
+        "whatsapp.broadcasts.update",
+        "whatsapp.chat_messages.get",
+        "whatsapp.chat_messages.list",
+        "whatsapp.chats.get",
+        "whatsapp.chats.list",
+        "whatsapp.chats.messages",
+        "whatsapp.message_templates.create",
+        "whatsapp.message_templates.delete",
+        "whatsapp.message_templates.get",
+        "whatsapp.message_templates.list",
+        "whatsapp.message_templates.preview",
+        "whatsapp.message_templates.update",
+        "whatsapp.messages.create",
+        "whatsapp.messages.get",
+        "whatsapp.messages.list"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "crm/v1/errors.ts",
+      "sha256": "68c94fbd0732bc57944c3187349a4e0bb5e9fa84c9bf56c80bf6cd89d8bc98fa",
+      "size": 6111
+    },
+    {
+      "path": "crm/v1/index.ts",
+      "sha256": "9c19243e540925cf18a424265329517cc9455dda1eafe693d92a1135b7fac458",
+      "size": 3931
+    },
+    {
+      "path": "crm/v1/operations.ts",
+      "sha256": "f55f7228103e69a93e0d691c45432251678cd280e44fe6d15dbe7a976cd274c2",
+      "size": 60574
+    },
+    {
+      "path": "crm/v1/types.ts",
+      "sha256": "4617d99c6fca15629d597cbcb878129b3809cdbea15bb38b01fd1a506b9e146b",
+      "size": 59363
+    },
+    {
+      "path": "identity/v1/errors.ts",
+      "sha256": "10524bf1e1f295481942347ed693c9a12d9903b9e8720975e88179696456c167",
+      "size": 4582
+    },
+    {
+      "path": "identity/v1/index.ts",
+      "sha256": "3bee152a6a100bb718adfde6aeda56a6ca31d7d19c2488c942effdf153a80d6e",
+      "size": 637
+    },
+    {
+      "path": "identity/v1/operations.ts",
+      "sha256": "1f0f87409048e00d55bd0fc19b4be3062071dfff381e96daf9499b37edd1fc59",
+      "size": 6778
+    },
+    {
+      "path": "identity/v1/types.ts",
+      "sha256": "1604e23044d345aee2c870ab314ab39fbb9fb8be6ebfd3d8eaf56c0a62c9001d",
+      "size": 34846
+    },
+    {
+      "path": "operation.ts",
+      "sha256": "2627fdfb06c1c608afd8b775b357fc59cd2868f260e7e8a5fbe748a5d675b094",
+      "size": 3926
+    },
+    {
+      "path": "whatsapp/v1/errors.ts",
+      "sha256": "34159a24a81d872238aca2f3653e67010ccfcbbed659e841638a792cdadebad5",
+      "size": 8203
+    },
+    {
+      "path": "whatsapp/v1/index.ts",
+      "sha256": "b7cd3671a9949578fd7f49d9f090aeff39bbf4a89f158693769ce608b7d647b7",
+      "size": 5946
+    },
+    {
+      "path": "whatsapp/v1/operations.ts",
+      "sha256": "38e6601e18910b82eedc93f3b72a6f1350b14c4177af688f573d545e90017307",
+      "size": 111167
+    },
+    {
+      "path": "whatsapp/v1/types.ts",
+      "sha256": "954874fa8027c9c2ee4be1250348136c486c1e68ea8f2688d7e671745912f23d",
+      "size": 107288
+    }
+  ]
+}
