@@ -33,7 +33,7 @@ import { createClient, ProtocolError } from "./sdk/index.js";
 export default {
   async fetch(request) {
     const origin = new URL(request.url).searchParams.get("origin");
-    const client = createClient({ apiKey: "secret", baseUrl: { crm: origin }, retries: 0 });
+    const client = createClient({ apiKey: "secret", baseUrl: { crm: origin }, allowLoopbackHttp: true, retries: 0 });
     const ok = await client.crm.contacts.get({ id: "ok" });
     let error;
     try {

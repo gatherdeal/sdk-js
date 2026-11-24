@@ -4,18 +4,22 @@
 //
 //   node scripts/smoke.mjs [runtime...] [--tarball file] [--chromium-executable path]
 //
-// Runtimes: node, bun, deno, types, workerd, chromium. Without arguments every
-// runtime runs and a missing one is skipped with a message; a named runtime
-// that is missing fails.
+// Runtimes: node, bun, deno, types, tests, workerd, chromium. Without
+// arguments every runtime runs and a missing one is skipped with a message; a
+// named runtime that is missing fails. workerd and chromium use the locked
+// harness dependencies in smoke/ (npm ci --prefix smoke). tests runs the unit
+// tests that use only the public API against the installed package.
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const ALL = ["node", "bun", "deno", "types", "workerd", "chromium"];
+const ALL = ["node", "bun", "deno", "types", "tests", "workerd", "chromium"];
+const harness = createRequire(join(ROOT, "smoke", "package.json"));
 
 const args = process.argv.slice(2);
 function option(name) {
@@ -36,7 +40,7 @@ function has(command) {
 
 function resolvable(specifier) {
   try {
-    import.meta.resolve(specifier);
+    harness.resolve(specifier);
     return true;
   } catch {
     return false;
@@ -44,10 +48,32 @@ function resolvable(specifier) {
 }
 
 async function chromiumAvailable() {
-  if (!resolvable("playwright-core")) return "playwright-core is not installed";
+  if (!resolvable("playwright-core")) return "playwright-core is not installed (npm ci --prefix smoke)";
   if (chromiumExecutable !== undefined) return existsSync(chromiumExecutable) ? true : `${chromiumExecutable} not found`;
-  const { chromium } = await import("playwright-core");
+  const { chromium } = await import(pathToFileURL(harness.resolve("playwright-core")).href);
   return existsSync(chromium.executablePath()) ? true : "no Chromium for playwright-core (npx playwright-core install chromium)";
+}
+
+/** Compiles the unit tests, keeps those that import only public entry points, and runs them on the package. */
+async function runPublicTests(consumer) {
+  const compiled = join(work, "compiled");
+  run(process.execPath, [join(ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", join(ROOT, "tsconfig.test.json"), "--outDir", compiled], ROOT);
+  const target = join(consumer, "build", "test");
+  await mkdir(target, { recursive: true });
+  await cp(join(ROOT, "test", "fixtures"), join(consumer, "test", "fixtures"), { recursive: true });
+  const entries = { "../src/index.js": "@gatherdeal/sdk", "../src/crm.js": "@gatherdeal/sdk/crm", "../src/identity.js": "@gatherdeal/sdk/identity", "../src/whatsapp.js": "@gatherdeal/sdk/whatsapp" };
+  const kept = [];
+  for (const name of await readdir(join(compiled, "test"))) {
+    if (!name.endsWith(".js")) continue;
+    let text = await readFile(join(compiled, "test", name), "utf8");
+    for (const [from, to] of Object.entries(entries)) text = text.replaceAll(`"${from}"`, `"${to}"`);
+    if (text.includes('"../src/') || text.includes("generated.mjs")) continue;
+    await writeFile(join(target, name), text);
+    if (name.endsWith(".test.js")) kept.push(join("build", "test", name));
+  }
+  if (kept.length === 0) throw new Error("no public-API tests found");
+  console.log(`tests on the package: ${kept.join(", ")}`);
+  run(process.execPath, ["--test", ...kept], consumer);
 }
 
 const work = await mkdtemp(join(tmpdir(), "gatherdeal-sdk-smoke-"));
@@ -103,8 +129,9 @@ try {
       available: () => true,
       run: () => run(process.execPath, [join(ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"], consumer),
     },
+    tests: { available: () => true, run: () => runPublicTests(consumer) },
     workerd: {
-      available: () => resolvable("miniflare") || "miniflare is not installed",
+      available: () => resolvable("miniflare") || "miniflare is not installed (npm ci --prefix smoke)",
       run: () => run(process.execPath, [join(ROOT, "smoke", "workerd.mjs"), installed], ROOT),
     },
     chromium: {
@@ -127,7 +154,7 @@ try {
       continue;
     }
     try {
-      runtime.run();
+      await runtime.run();
       results.push(`${name}: ok`);
     } catch {
       results.push(`${name}: FAILED`);

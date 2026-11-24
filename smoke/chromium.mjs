@@ -58,7 +58,7 @@ import { createClient } from "/sdk/index.js";
 const result = {};
 try {
   try { createClient({ apiKey: "k" }); result.apiKeyGuard = false; } catch { result.apiKeyGuard = true; }
-  const client = createClient({ token: () => "t", baseUrl: { crm: ${JSON.stringify(api.url)} }, retries: 0 });
+  const client = createClient({ token: () => "t", baseUrl: { crm: ${JSON.stringify(api.url)} }, allowLoopbackHttp: true, retries: 0 });
   result.created = (await client.crm.contacts.create({ name: "Tan" })).id;
   result.revision = (await client.crm.deals.update({ id: "d1", if_match: "r1", remark: "x" })).revision;
   try { await client.crm.contacts.get({ id: "missing" }); } catch (e) {

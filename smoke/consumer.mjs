@@ -107,7 +107,7 @@ check(crm.problems.PRECONDITION_FAILED.status === 412, "problem table");
     return new Response("{}");
   });
   const origin = await serve(() => new Response(null, { status: 302, headers: { Location: `${target.url}/v1/contacts/c1` } }));
-  const client = createClient({ apiKey: "secret", baseUrl: { crm: origin.url }, retries: 0 });
+  const client = createClient({ apiKey: "secret", baseUrl: { crm: origin.url }, allowLoopbackHttp: true, retries: 0 });
   let error;
   try {
     await client.crm.contacts.get({ id: "c1" });

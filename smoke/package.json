@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "description": "Runtime harnesses for the workerd and Chromium smoke tests.",
+  "type": "module",
+  "devDependencies": {
+    "miniflare": "4.20260730.0",
+    "playwright-core": "1.65.0"
+  }
+}
