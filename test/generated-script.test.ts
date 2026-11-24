@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync, symlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
@@ -107,5 +107,37 @@ describe("generated.mjs", () => {
     assert.equal(result.code, 1);
     assert.match(result.out, new RegExp(`${index.files[0].path}: HTTP 404`));
     assert.equal((await run("check")).code, 0);
+  });
+
+  it("rejects unknown fields and duplicate public ids", async () => {
+    const extra = JSON.parse(lockBytes.toString("utf8"));
+    extra.services[0].note = "x";
+    routes = new Map([["/index.json", Buffer.from(JSON.stringify(extra))]]);
+    assert.match((await run("sync")).out, /must have exactly the fields/);
+    const dup = JSON.parse(lockBytes.toString("utf8"));
+    dup.services[0].public_ids.push(dup.services[0].public_ids[0]);
+    routes = new Map([["/index.json", Buffer.from(JSON.stringify(dup))]]);
+    assert.match((await run("sync")).out, /duplicate public id/);
+  });
+
+  it("stops reading a file longer than its declared size", async () => {
+    publishLockedSet();
+    const first = lock.files[0]!;
+    routes.set(`/sets/${hex}/${first.path}`, Buffer.alloc(first.size + 10, 0x20));
+    const result = await run("verify-remote");
+    assert.equal(result.code, 1);
+    assert.match(result.out, /exceeds/);
+  });
+
+  it("rejects a symlink under src/generated", async () => {
+    const link = `${root}src/generated/extra.ts`;
+    symlinkSync(`${root}src/generated/operation.ts`, link);
+    try {
+      const result = await run("check");
+      assert.equal(result.code, 1);
+      assert.match(result.out, /not a regular file/);
+    } finally {
+      rmSync(link);
+    }
   });
 });

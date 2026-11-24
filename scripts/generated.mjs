@@ -20,7 +20,7 @@
 // --base <url> replaces the published location, https://docs.gatherdeal.ai/sdk/js.
 
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile, rename } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, writeFile, rename } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,13 @@ const SET_PATTERN = /^sha256:([0-9a-f]{64})$/;
 const HEX_PATTERN = /^[0-9a-f]{64}$/;
 const ID_PATTERN = /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_SET_BYTES = 32 * 1024 * 1024;
+const MAX_FILES = 200;
+const MAX_INDEX_BYTES = 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+const INDEX_KEYS = ["format_version", "set", "services", "files"];
+const SERVICE_KEYS = ["service", "version", "contract_sha256", "public_ids"];
+const FILE_KEYS = ["path", "sha256", "size"];
 
 class VerificationError extends Error {}
 
@@ -50,15 +57,26 @@ function setHash(files) {
   return `sha256:${sha256(Buffer.from(JSON.stringify(list)))}`;
 }
 
-/** Validates the shape of an index and returns it. */
+function exactKeys(value, keys, what) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) fail(`${what} is not an object`);
+  const actual = Object.keys(value);
+  if (actual.length !== keys.length || !keys.every((k) => Object.hasOwn(value, k))) {
+    fail(`${what} must have exactly the fields ${keys.join(", ")}`);
+  }
+}
+
+/** Validates an index against the closed schema and returns it. */
 function validateIndex(index) {
-  if (typeof index !== "object" || index === null) fail("index is not an object");
+  exactKeys(index, INDEX_KEYS, "index");
   if (index.format_version !== 1) fail(`unsupported format_version ${index.format_version}`);
   if (typeof index.set !== "string" || !SET_PATTERN.test(index.set)) fail("malformed set");
   if (!Array.isArray(index.files) || index.files.length === 0) fail("missing files");
+  if (index.files.length > MAX_FILES) fail(`more than ${MAX_FILES} files`);
   if (!Array.isArray(index.services) || index.services.length === 0) fail("missing services");
   let previous = "";
+  let total = 0;
   for (const f of index.files) {
+    exactKeys(f, FILE_KEYS, "file entry");
     if (typeof f?.path !== "string" || !PATH_PATTERN.test(f.path) || f.path.split("/").includes("..")) {
       fail(`path outside src/generated: ${JSON.stringify(f?.path)}`);
     }
@@ -66,21 +84,49 @@ function validateIndex(index) {
     previous = f.path;
     if (typeof f.sha256 !== "string" || !HEX_PATTERN.test(f.sha256)) fail(`malformed sha256 of ${f.path}`);
     if (!Number.isInteger(f.size) || f.size < 0 || f.size > MAX_FILE_BYTES) fail(`malformed size of ${f.path}`);
+    total += f.size;
   }
+  if (total > MAX_SET_BYTES) fail(`set larger than ${MAX_SET_BYTES} bytes`);
   if (setHash(index.files) !== index.set) fail("set hash does not match the file list");
   const paths = new Set(index.files.map((f) => f.path));
+  const services = new Set();
+  const ids = new Set();
   for (const s of index.services) {
-    if (typeof s?.service !== "string" || !/^[a-z0-9_]+$/.test(s.service)) fail("malformed service name");
+    exactKeys(s, SERVICE_KEYS, "service entry");
+    if (typeof s.service !== "string" || !/^[a-z0-9_]+$/.test(s.service)) fail("malformed service name");
     if (typeof s.version !== "string" || !/^v[0-9]+$/.test(s.version)) fail(`malformed version of ${s.service}`);
+    if (services.has(`${s.service}/${s.version}`)) fail(`duplicate service ${s.service} ${s.version}`);
+    services.add(`${s.service}/${s.version}`);
+    if (typeof s.contract_sha256 !== "string" || !HEX_PATTERN.test(s.contract_sha256)) {
+      fail(`malformed contract_sha256 of ${s.service}`);
+    }
     if (!Array.isArray(s.public_ids)) fail(`missing public_ids of ${s.service}`);
     for (const id of s.public_ids) {
       if (typeof id !== "string" || !ID_PATTERN.test(id) || !id.startsWith(`${s.service}.`)) {
         fail(`malformed public id ${JSON.stringify(id)}`);
       }
+      if (ids.has(id)) fail(`duplicate public id ${id}`);
+      ids.add(id);
     }
     if (!paths.has(`${s.service}/${s.version}/operations.ts`)) fail(`missing operations of ${s.service}`);
   }
   return index;
+}
+
+/** The canonical text of an index: known fields only, in a fixed order. */
+function canonical(index) {
+  const value = {
+    format_version: index.format_version,
+    set: index.set,
+    services: index.services.map((s) => ({
+      service: s.service,
+      version: s.version,
+      contract_sha256: s.contract_sha256,
+      public_ids: s.public_ids,
+    })),
+    files: index.files.map((f) => ({ path: f.path, sha256: f.sha256, size: f.size })),
+  };
+  return `${JSON.stringify(value, null, 2)}\n`;
 }
 
 /** Fails unless every public id of the index is defined by its operations module. */
@@ -93,16 +139,24 @@ function checkPublicIds(index, contentOf) {
   }
 }
 
+/** Regular files under dir; fails on symlinks and other non-regular entries. */
 async function listFiles(dir) {
+  if (!(await lstat(dir)).isDirectory()) fail(`${relative(ROOT, dir)} is not a directory`);
   const out = [];
   for (const entry of await readdir(dir, { withFileTypes: true, recursive: true })) {
-    if (entry.isFile()) out.push(relative(GENERATED, join(entry.parentPath, entry.name)).split(sep).join("/"));
+    const path = relative(GENERATED, join(entry.parentPath, entry.name)).split(sep).join("/");
+    if (entry.isDirectory()) continue;
+    if (!entry.isFile()) fail(`src/generated/${path} is not a regular file`);
+    out.push(path);
   }
   return out.sort();
 }
 
 async function readLock() {
-  return validateIndex(JSON.parse(await readFile(LOCK, "utf8")));
+  const text = await readFile(LOCK, "utf8");
+  const lock = validateIndex(JSON.parse(text));
+  if (canonical(lock) !== text) fail("generated.lock.json is not in canonical form");
+  return lock;
 }
 
 async function check() {
@@ -122,20 +176,30 @@ async function check() {
   console.log(`src/generated matches ${lock.set}`);
 }
 
-async function fetchBytes(url) {
-  const response = await fetch(url, { redirect: "error", cache: "no-store" });
+const downloads = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
+
+/** Fetches url, reading at most limit bytes; fails on a longer body or after the download time limit. */
+async function fetchBytes(url, limit) {
+  const response = await fetch(url, { redirect: "error", cache: "no-store", signal: downloads });
   if (!response.ok) {
     await response.body?.cancel();
     return { status: response.status };
   }
-  return { status: response.status, bytes: Buffer.from(await response.arrayBuffer()) };
+  const chunks = [];
+  let length = 0;
+  for await (const chunk of response.body ?? []) {
+    length += chunk.length;
+    if (length > limit) fail(`${url}: body exceeds ${limit} bytes`);
+    chunks.push(chunk);
+  }
+  return { status: response.status, bytes: Buffer.concat(chunks) };
 }
 
 async function fetchSet(index) {
   const hex = SET_PATTERN.exec(index.set)[1];
   const files = new Map();
   for (const f of index.files) {
-    const { status, bytes } = await fetchBytes(`${base()}/sets/${hex}/${f.path}`);
+    const { status, bytes } = await fetchBytes(`${base()}/sets/${hex}/${f.path}`, f.size);
     if (bytes === undefined) fail(`${f.path}: HTTP ${status}`);
     if (bytes.length !== f.size) fail(`${f.path}: size ${bytes.length}, want ${f.size}`);
     if (sha256(bytes) !== f.sha256) fail(`${f.path}: sha256 mismatch`);
@@ -184,15 +248,14 @@ function summarize(before, after) {
 async function sync(out) {
   const result = { changed: false, title: "", body: "", needsReview: false };
   const lock = await readLock();
-  const lockBytes = await readFile(LOCK);
-  const { status, bytes } = await fetchBytes(`${base()}/index.json`);
+  const { status, bytes } = await fetchBytes(`${base()}/index.json`, MAX_INDEX_BYTES);
   if (status === 404) {
     console.log("no published index; nothing to do");
   } else if (bytes === undefined) {
     fail(`index.json: HTTP ${status}`);
   } else {
     const index = validateIndex(JSON.parse(bytes.toString("utf8")));
-    if (bytes.equals(lockBytes)) {
+    if (canonical(index) === canonical(lock)) {
       console.log(`up to date at ${lock.set}`);
     } else {
       const files = await fetchSet(index);
@@ -204,7 +267,7 @@ async function sync(out) {
       }
       await rm(GENERATED, { recursive: true, force: true });
       await rename(staging, GENERATED);
-      await writeFile(LOCK, bytes);
+      await writeFile(LOCK, canonical(index));
       Object.assign(result, { changed: true }, summarize(lock, index));
       console.log(`updated to ${index.set}`);
     }
