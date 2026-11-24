@@ -8,7 +8,7 @@ import {
 import type { Operation } from "./generated/operation.js";
 import { serializeRequest, type SerializedRequest } from "./request.js";
 import { readResponse } from "./response.js";
-import { isCloudflareWorkers, randomId, sleep } from "./runtime.js";
+import { randomId, sleep } from "./runtime.js";
 
 /** Per-call options, the second argument of every method. */
 export interface CallOptions {
@@ -86,12 +86,11 @@ async function attempt(
     const init: RequestInit = {
       method: request.method,
       headers,
+      credentials: "omit",
       redirect: "manual",
       signal: controller.signal,
     };
     if (request.body !== undefined) init.body = request.body;
-    // Cloudflare Workers reject the credentials member; they never send cookies.
-    if (!isCloudflareWorkers()) init.credentials = "omit";
     const response = await config.fetch(request.url, init);
     return await readResponse(op, response, context);
   } catch (error) {

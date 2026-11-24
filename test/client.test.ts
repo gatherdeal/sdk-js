@@ -57,14 +57,6 @@ describe("createClient", () => {
     await withGlobal("fetch", f.fetch, () => c.crm.contacts.get({ id: "c1" }));
     assert.equal(f.calls.length, 1);
   });
-
-  it("omits the credentials member on Cloudflare Workers", async () => {
-    const f = fakeFetch(json(200, { status: "success", contact: {} }));
-    const c = createClient({ apiKey: "k", fetch: f.fetch });
-    await withGlobal("navigator", { userAgent: "Cloudflare-Workers" }, () => c.crm.contacts.get({ id: "c1" }));
-    assert.equal("credentials" in f.calls[0]!.init, false);
-    assert.equal(f.calls[0]!.init.redirect, "manual");
-  });
 });
 
 describe("redirects", () => {

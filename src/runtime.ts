@@ -4,12 +4,6 @@ export function isBrowserLike(): boolean {
   return typeof g.document !== "undefined" || typeof g.importScripts === "function";
 }
 
-/** True inside Cloudflare Workers, whose fetch rejects the credentials member. */
-export function isCloudflareWorkers(): boolean {
-  const nav = (globalThis as { navigator?: { userAgent?: unknown } }).navigator;
-  return nav?.userAgent === "Cloudflare-Workers";
-}
-
 /** A random version 4 UUID. */
 export function randomId(): string {
   const c = globalThis.crypto;
