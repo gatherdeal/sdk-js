@@ -1,25 +1,34 @@
 import type { JsonKind, ProblemInfo } from "./generated/operation.js";
 
-interface ErrorContext {
+/** Diagnostic fields every SDK error carries. */
+export interface ErrorContext {
   /** Public id of the operation, e.g. "crm.contacts.list". */
   readonly operation: string;
   /** The Idempotency-Key the call sent, if any. */
   readonly idempotencyKey?: string | undefined;
-  readonly cause?: unknown;
+  /** The 1-based attempt that failed; undefined before the first request. */
+  readonly attempt?: number | undefined;
 }
 
-/** Base class of every error the SDK throws. Caller aborts are rethrown as given. */
+/**
+ * Base class of every error the SDK throws. Caller aborts are rethrown as
+ * given. Errors never carry requests, headers, credentials or the errors of a
+ * custom fetch or token provider.
+ */
 export class GatherDealError extends Error {
   override name = "GatherDealError";
   /** Public id of the operation, e.g. "crm.contacts.list". */
   readonly operation: string;
   /** The Idempotency-Key the call sent. Reuse it to retry the same write safely. */
   readonly idempotencyKey: string | undefined;
+  /** The 1-based attempt that failed; undefined before the first request. */
+  readonly attempt: number | undefined;
 
   constructor(message: string, context: ErrorContext) {
-    super(message, context.cause === undefined ? undefined : { cause: context.cause });
+    super(message);
     this.operation = context.operation;
     this.idempotencyKey = context.idempotencyKey;
+    this.attempt = context.attempt;
   }
 }
 
@@ -131,9 +140,14 @@ export class ConnectionError extends GatherDealError {
   override name = "ConnectionError";
 }
 
-/** An attempt exceeded timeoutMs. */
+/** The call exceeded timeoutMs. */
 export class TimeoutError extends GatherDealError {
   override name = "TimeoutError";
+}
+
+/** The token provider threw, or returned something that is not a usable token. */
+export class CredentialError extends GatherDealError {
+  override name = "CredentialError";
 }
 
 /** Narrows error to an ApiError, optionally with the given code. */

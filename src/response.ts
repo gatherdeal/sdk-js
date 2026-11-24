@@ -1,10 +1,12 @@
-import { ApiError, ProtocolError, StatusError, type ProblemRecord, type Violation } from "./errors.js";
+import {
+  ApiError,
+  ProtocolError,
+  StatusError,
+  type ErrorContext,
+  type ProblemRecord,
+  type Violation,
+} from "./errors.js";
 import type { Operation } from "./generated/operation.js";
-
-interface Context {
-  readonly operation: string;
-  readonly idempotencyKey: string | undefined;
-}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -56,7 +58,7 @@ export function isRedirect(response: Response): boolean {
 export async function readResponse(
   op: Operation<unknown, unknown, string>,
   response: Response,
-  context: Context,
+  context: ErrorContext,
 ): Promise<unknown> {
   const status = response.status;
   if (isRedirect(response)) {
@@ -96,10 +98,14 @@ export async function readResponse(
   if (doc.retryable !== undefined && typeof doc.retryable !== "boolean") {
     throw protocol("problem retryable is not a boolean");
   }
-  const retryAfterMs =
-    typeof doc.retry_after_ms === "number" && Number.isInteger(doc.retry_after_ms) && doc.retry_after_ms >= 0
+  const bodyRetryAfter =
+    typeof doc.retry_after_ms === "number" && Number.isSafeInteger(doc.retry_after_ms) && doc.retry_after_ms >= 0
       ? doc.retry_after_ms
-      : headerRetryAfter;
+      : undefined;
+  const retryAfterMs =
+    bodyRetryAfter === undefined || headerRetryAfter === undefined
+      ? (bodyRetryAfter ?? headerRetryAfter)
+      : Math.max(bodyRetryAfter, headerRetryAfter);
   throw new ApiError(
     {
       status,
