@@ -6,8 +6,16 @@ import * as identityErrors from "./generated/identity/v1/errors.js";
 import type { Operation, ProblemInfo } from "./generated/operation.js";
 import * as whatsapp from "./generated/whatsapp/v1/index.js";
 import * as whatsappErrors from "./generated/whatsapp/v1/errors.js";
-import { isBrowserLike } from "./runtime.js";
-import { invoke, type CallOptions, type Credential, type TransportConfig } from "./transport.js";
+import { deepFreeze, isBrowserLike } from "./runtime.js";
+import {
+  checkRetries,
+  checkTimeout,
+  invoke,
+  isHeaderToken,
+  type CallOptions,
+  type Credential,
+  type TransportConfig,
+} from "./transport.js";
 
 /** Options of createClient. */
 export interface ClientOptions {
@@ -17,11 +25,13 @@ export interface ClientOptions {
   readonly token?: () => string | Promise<string>;
   /** The fetch implementation. Defaults to globalThis.fetch. */
   readonly fetch?: typeof globalThis.fetch;
-  /** Base URL per service, e.g. { crm: "https://api.gatherdeal.ai/crm" }. */
+  /** Absolute https base URL per service, e.g. { crm: "https://api.gatherdeal.ai/crm" }. */
   readonly baseUrl?: { readonly crm?: string; readonly identity?: string; readonly whatsapp?: string };
+  /** Allows http base URLs on a loopback host (localhost, 127.0.0.0/8, [::1]). */
+  readonly allowLoopbackHttp?: boolean;
   /** Additional attempts after the first for retryable failures. Default 2. */
   readonly retries?: number;
-  /** Time limit of each attempt in milliseconds. Default 30000. */
+  /** Time limit of each call in milliseconds, retries and token refresh included. Default 60000. */
   readonly timeoutMs?: number;
   /** Allows apiKey in a browser, where any visitor can read it. */
   readonly dangerouslyAllowBrowser?: boolean;
@@ -89,7 +99,7 @@ function bindTree(
     }
     const op = value;
     const method = (input?: Record<string, unknown>, options?: CallOptions) =>
-      invoke(config, op, baseUrl, input ?? {}, options);
+      invoke(config, op, problems, baseUrl, input ?? {}, options);
     method.operation = op;
     method.isError = (error: unknown, code?: string) =>
       error instanceof ApiError &&
@@ -101,15 +111,58 @@ function bindTree(
   return Object.freeze(out);
 }
 
-function bindService(
-  name: string,
-  tree: object,
-  defaultBaseUrl: string,
-  problems: ProblemTable,
-  config: TransportConfig,
-  baseUrl: string | undefined,
-): unknown {
-  const methods = bindTree(tree, config, baseUrl ?? defaultBaseUrl, problems);
+interface ServiceDefinition {
+  readonly name: ServiceName;
+  readonly operations: object;
+  readonly baseUrl: string;
+  readonly problems: ProblemTable;
+}
+
+type ServiceName = "crm" | "identity" | "whatsapp";
+
+const SERVICES: readonly ServiceDefinition[] = deepFreeze([
+  { name: "crm", operations: crm.operations, baseUrl: crm.service.baseURL, problems: crmErrors.problems },
+  {
+    name: "identity",
+    operations: identity.operations,
+    baseUrl: identity.service.baseURL,
+    problems: identityErrors.problems,
+  },
+  {
+    name: "whatsapp",
+    operations: whatsapp.operations,
+    baseUrl: whatsapp.service.baseURL,
+    problems: whatsappErrors.problems,
+  },
+]);
+
+function isLoopback(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+}
+
+function checkBaseUrl(service: string, value: unknown, allowLoopbackHttp: boolean): string {
+  const where = `createClient: baseUrl.${service}`;
+  if (typeof value !== "string") throw new TypeError(`${where} must be a string`);
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new TypeError(`${where} must be an absolute URL`);
+  }
+  if (url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "") {
+    throw new TypeError(`${where} must not carry credentials, a query or a fragment`);
+  }
+  const secure = url.protocol === "https:";
+  const loopback = url.protocol === "http:" && allowLoopbackHttp && isLoopback(url.hostname);
+  if (!secure && !loopback) {
+    throw new TypeError(`${where} must use https; http is allowed only for a loopback host with allowLoopbackHttp`);
+  }
+  return url.href.replace(/\/+$/, "");
+}
+
+function bindService(definition: ServiceDefinition, config: TransportConfig, baseUrl: string): unknown {
+  const { name, problems } = definition;
+  const methods = bindTree(definition.operations, config, baseUrl, problems);
   return Object.freeze({
     ...methods,
     isError: (error: unknown, code?: string) =>
@@ -127,8 +180,11 @@ export function createClient(options: ClientOptions = {}): Client {
   if (options.apiKey !== undefined && options.token !== undefined) {
     throw new TypeError("createClient: pass apiKey or token, not both");
   }
-  if (options.apiKey !== undefined && options.apiKey === "") {
-    throw new TypeError("createClient: apiKey is empty");
+  if (options.apiKey !== undefined && !isHeaderToken(options.apiKey)) {
+    throw new TypeError("createClient: apiKey must be a non-empty string of visible ASCII characters");
+  }
+  if (options.token !== undefined && typeof options.token !== "function") {
+    throw new TypeError("createClient: token must be a function");
   }
   if (options.apiKey !== undefined && isBrowserLike() && options.dangerouslyAllowBrowser !== true) {
     throw new Error(
@@ -136,6 +192,14 @@ export function createClient(options: ClientOptions = {}): Client {
         "Call the API from your server, or use a per-user token. " +
         "Set dangerouslyAllowBrowser: true to override.",
     );
+  }
+  const retries = options.retries ?? 2;
+  checkRetries(retries, "createClient");
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  checkTimeout(timeoutMs, "createClient");
+  const overrides: Readonly<Record<string, unknown>> = options.baseUrl ?? {};
+  for (const key of Object.keys(overrides)) {
+    if (!SERVICES.some((s) => s.name === key)) throw new TypeError(`createClient: unknown service baseUrl.${key}`);
   }
   const credential: Credential =
     options.apiKey !== undefined
@@ -147,27 +211,17 @@ export function createClient(options: ClientOptions = {}): Client {
   const config: TransportConfig = {
     fetch: (input, init) => (fetchImpl === undefined ? globalThis.fetch(input, init) : fetchImpl(input, init)),
     credential,
-    retries: options.retries ?? 2,
-    timeoutMs: options.timeoutMs ?? 30_000,
+    retries,
+    timeoutMs,
   };
-  const base = options.baseUrl ?? {};
-  return Object.freeze({
-    crm: bindService("crm", crm.operations, crm.service.baseURL, crmErrors.problems, config, base.crm),
-    identity: bindService(
-      "identity",
-      identity.operations,
-      identity.service.baseURL,
-      identityErrors.problems,
-      config,
-      base.identity,
-    ),
-    whatsapp: bindService(
-      "whatsapp",
-      whatsapp.operations,
-      whatsapp.service.baseURL,
-      whatsappErrors.problems,
-      config,
-      base.whatsapp,
-    ),
-  }) as Client;
+  const client: Record<string, unknown> = {};
+  for (const definition of SERVICES) {
+    const override = overrides[definition.name];
+    const baseUrl =
+      override === undefined
+        ? definition.baseUrl
+        : checkBaseUrl(definition.name, override, options.allowLoopbackHttp === true);
+    client[definition.name] = bindService(definition, config, baseUrl);
+  }
+  return Object.freeze(client) as unknown as Client;
 }
