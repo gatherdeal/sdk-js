@@ -161,9 +161,49 @@ describe("request serialization", () => {
   });
 
   it("uses a base URL override per service", async () => {
-    const f = fakeFetch(json(200, ok));
-    const c = createClient({ apiKey: "k", fetch: f.fetch, baseUrl: { crm: "http://localhost:5005/" } });
-    await c.crm.contacts.list();
-    assert.equal(f.calls[0]!.url, "http://localhost:5005/v1/contacts");
+    const f = fakeFetch(json(200, ok), json(200, ok));
+    await createClient({ apiKey: "k", fetch: f.fetch, baseUrl: { crm: "https://gw.example.test/crm/" } }).crm.contacts.list();
+    assert.equal(f.calls[0]!.url, "https://gw.example.test/crm/v1/contacts");
+    const local = createClient({ apiKey: "k", fetch: f.fetch, baseUrl: { crm: "http://localhost:5005" }, allowLoopbackHttp: true });
+    await local.crm.contacts.list();
+    assert.equal(f.calls[1]!.url, "http://localhost:5005/v1/contacts");
+  });
+
+  it("refuses unsafe base URLs at construction", () => {
+    const bad: [Record<string, string>, boolean, RegExp][] = [
+      [{ crm: "http://api.example.test/crm" }, false, /must use https/],
+      [{ crm: "http://api.example.test/crm" }, true, /must use https/],
+      [{ crm: "http://127.0.0.1:5005" }, false, /must use https/],
+      [{ crm: "/crm" }, false, /absolute URL/],
+      [{ crm: "crm.example.test" }, false, /must use https|absolute URL/],
+      [{ crm: "https://user:pw@api.example.test" }, false, /credentials, a query or a fragment/],
+      [{ crm: "https://api.example.test/crm?x=1" }, false, /credentials, a query or a fragment/],
+      [{ billing: "https://api.example.test" }, false, /unknown service/],
+    ];
+    for (const [baseUrl, allowLoopbackHttp, message] of bad) {
+      assert.throws(() => createClient({ apiKey: "k", baseUrl, allowLoopbackHttp }), message, JSON.stringify(baseUrl));
+    }
+    assert.ok(createClient({ baseUrl: { crm: "http://[::1]:5005" }, allowLoopbackHttp: true }));
+  });
+
+  it("rejects empty and dot-segment path values", async () => {
+    for (const id of ["", ".", ".."]) {
+      await assert.rejects(client(fakeFetch().fetch).crm.contacts.get({ id }), /must not be empty, "\." or "\.\."/);
+      await assert.rejects(
+        client(fakeFetch().fetch).crm.deals.update({ id, if_match: "r" }),
+        /must not be empty/,
+      );
+    }
+  });
+
+  it("rejects idempotency keys that would change on the wire", async () => {
+    for (const key of ["", " k", "k ", "a b", "ключ", "x".repeat(256)]) {
+      const f = fakeFetch();
+      await assert.rejects(
+        client(f.fetch).crm.contacts.create({ name: "Tan" } as never, { idempotencyKey: key }),
+        /idempotencyKey must be/,
+      );
+      assert.equal(f.calls.length, 0);
+    }
   });
 });

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   ApiError,
   ConnectionError,
+  CredentialError,
   TimeoutError,
   createClient,
   type ClientOptions,
@@ -106,14 +107,60 @@ describe("retries", () => {
     assert.equal(f.calls.length, 2);
   });
 
-  it("times out an attempt and retries it", async () => {
+  it("applies one deadline to the whole call", async () => {
     const hang: Reply = (call) =>
       new Promise((_, reject) => call.init.signal!.addEventListener("abort", () => reject(new Error("aborted"))));
-    const { f, client } = setup([hang, listOk()], { timeoutMs: 20 });
-    await client.crm.contacts.list();
-    assert.equal(f.calls.length, 2);
-    const { client: once } = setup([hang], { timeoutMs: 20, retries: 0 });
-    assert.ok((await rejection(once.crm.contacts.list())) instanceof TimeoutError);
+    const { f, client } = setup([hang, listOk()], { timeoutMs: 30 });
+    const error = await rejection(client.crm.contacts.list());
+    assert.ok(error instanceof TimeoutError && error.attempt === 1, String(error));
+    assert.equal(f.calls.length, 1);
+  });
+
+  it("does not start a backoff wait that would pass the deadline", async () => {
+    const { f, client } = setup([unavailable(500), listOk()], { timeoutMs: 100 });
+    const started = Date.now();
+    const error = await rejection(client.crm.contacts.list());
+    assert.ok(error instanceof ApiError && error.code === "UNAVAILABLE");
+    assert.ok(Date.now() - started < 90);
+    assert.equal(f.calls.length, 1);
+  });
+
+  it("bounds a hanging token provider by the deadline", async () => {
+    const { f, client } = setup([], { token: () => new Promise<string>(() => undefined), timeoutMs: 30 });
+    assert.ok((await rejection(client.crm.contacts.list())) instanceof TimeoutError);
+    assert.equal(f.calls.length, 0);
+  });
+
+  it("calls nothing when the signal is already aborted", async () => {
+    let provided = 0;
+    const reason = new Error("gone");
+    const { f, client } = setup([], {
+      token: () => {
+        provided++;
+        return "t";
+      },
+    });
+    assert.equal(await rejection(client.crm.contacts.list({}, { signal: AbortSignal.abort(reason) })), reason);
+    assert.equal(provided, 0);
+    assert.equal(f.calls.length, 0);
+  });
+
+  it("follows the catalog's retryable flag for known codes", async () => {
+    const { f, client } = setup([problem(500, "INTERNAL_ERROR", { retryable: true }), listOk()]);
+    assert.ok((await rejection(client.crm.contacts.list())) instanceof ApiError);
+    assert.equal(f.calls.length, 1);
+    const w = setup([problem(503, "UNAVAILABLE", { retryable: false, retry_after_ms: 0 }), json(200, { status: "success", agents: { data: [], has_next_page: false, has_prev_page: false, page_size: 20 } })]);
+    await w.client.whatsapp.agents.list().catch(() => undefined);
+    assert.equal(w.f.calls.length, 2);
+  });
+
+  it("uses the longer of retry_after_ms and Retry-After", async () => {
+    const { f, client } = setup([
+      problem(503, "UNAVAILABLE", { retryable: true, retry_after_ms: 0 }, { "Retry-After": "120" }),
+    ]);
+    const error = await rejection(client.crm.contacts.list());
+    assert.ok(error instanceof ApiError && error.retryAfterMs === 120_000);
+    assert.equal(f.calls.length, 1);
   });
 
   it("rethrows a caller abort as is, without retrying", async () => {
@@ -199,6 +246,52 @@ describe("token refresh", () => {
     const error = await rejection(client.crm.contacts.list());
     assert.ok(error instanceof ApiError && error.status === 401);
     assert.equal(f.calls.length, 1);
+  });
+
+  it("never backs off on a 401, even one marked retryable", async () => {
+    const t = tokens();
+    const { f, client } = setup([networkError(), problem(401, "UNAUTHORIZED", { retryable: true }), createOk()], {
+      token: t.token,
+    });
+    const error = await rejection(client.crm.contacts.create(createInput));
+    assert.ok(error instanceof ApiError && error.status === 401);
+    assert.equal(f.calls.length, 2);
+  });
+
+  it("keeps provider failures free of their details and keeps the key", async () => {
+    let n = 0;
+    const token = () => {
+      n++;
+      if (n === 1) return "t1";
+      throw Object.assign(new Error("Bearer secret-refresh-token"), { token: "secret-refresh-token" });
+    };
+    const { client } = setup([unauthorized()], { token });
+    const error = await rejection(client.crm.contacts.create(createInput, { idempotencyKey: "k-3" }));
+    assert.ok(error instanceof CredentialError, String(error));
+    assert.equal(error.idempotencyKey, "k-3");
+    assert.equal(error.attempt, 1);
+    assert.equal(error.cause, undefined);
+    assert.doesNotMatch(JSON.stringify({ ...error, message: error.message, stack: error.stack }), /secret/);
+  });
+
+  it("rejects an unusable token", async () => {
+    for (const value of ["", "a b", 42]) {
+      const { f, client } = setup([], { token: () => value as string });
+      assert.ok((await rejection(client.crm.contacts.list())) instanceof CredentialError);
+      assert.equal(f.calls.length, 0);
+    }
+  });
+
+  it("keeps fetch failures free of the request", async () => {
+    const leaky = Object.assign(new TypeError("failed: Authorization: Bearer k"), {
+      request: new Request("https://x.test/", { headers: { Authorization: "Bearer k" } }),
+    });
+    const { client } = setup([leaky], { retries: 0 });
+    const error = await rejection(client.crm.contacts.list());
+    assert.ok(error instanceof ConnectionError);
+    assert.equal(error.cause, undefined);
+    assert.doesNotMatch(error.message, /Bearer/);
+    assert.equal(error.attempt, 1);
   });
 
   it("treats a status-only 401 like a problem 401", async () => {

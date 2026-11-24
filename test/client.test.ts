@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, describe, it } from "node:test";
+import { problems as crmProblems, service as crmService } from "../src/crm.js";
 import { ApiError, ProtocolError, createClient, paginate } from "../src/index.js";
 import { fakeFetch, json, problem, rejection } from "./helpers.js";
 
@@ -37,9 +38,33 @@ describe("createClient", () => {
     assert.ok(createClient({ apiKey: "k" }));
   });
 
-  it("refuses both credentials and an empty key", () => {
+  it("refuses both credentials and an unusable key", () => {
     assert.throws(() => createClient({ apiKey: "k", token: () => "t" }), /not both/);
-    assert.throws(() => createClient({ apiKey: "" }), /empty/);
+    assert.throws(() => createClient({ apiKey: "" }), /apiKey must be/);
+    assert.throws(() => createClient({ apiKey: "a b" }), /apiKey must be/);
+  });
+
+  it("validates retries and timeoutMs", async () => {
+    for (const retries of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
+      assert.throws(() => createClient({ retries }), /retries must be a non-negative integer/);
+      await assert.rejects(createClient({ fetch: fakeFetch().fetch }).crm.contacts.list({}, { retries }), /retries must be/);
+    }
+    for (const timeoutMs of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31]) {
+      assert.throws(() => createClient({ timeoutMs }), /timeoutMs must be/);
+    }
+  });
+
+  it("freezes descriptors and service metadata", () => {
+    const c = createClient({ apiKey: "k" });
+    const op = c.crm.contacts.list.operation as unknown as { idempotency: string; parameters: { encoding: string }[] };
+    assert.throws(() => {
+      op.idempotency = "keyed";
+    }, TypeError);
+    assert.throws(() => {
+      op.parameters[0]!.encoding = "json";
+    }, TypeError);
+    assert.ok(Object.isFrozen(crmService) && Object.isFrozen(crmProblems.PRECONDITION_FAILED));
+    assert.ok(Object.isFrozen(c.crm.contacts));
   });
 
   it("sends no Authorization header without a credential", async () => {
@@ -96,7 +121,7 @@ describe("redirects", () => {
     const origin = await listen((_req, res) => {
       res.writeHead(302, { Location: `${target}/v1/contacts/c1` }).end();
     });
-    const c = createClient({ apiKey: "secret", baseUrl: { crm: origin }, retries: 0 });
+    const c = createClient({ apiKey: "secret", baseUrl: { crm: origin }, allowLoopbackHttp: true, retries: 0 });
     const error = await rejection(c.crm.contacts.get({ id: "c1" }));
     assert.ok(error instanceof ProtocolError);
     assert.deepEqual(seen, []);
@@ -134,6 +159,25 @@ describe("pagination", () => {
     await assert.rejects(async () => {
       for await (const _ of paginate(c.crm.contacts.list, {})) void _;
     }, /repeated a page cursor/);
+  });
+
+  it("throws ProtocolError before yielding a malformed page", async () => {
+    const pages = [
+      json(200, { status: "success", contacts: { data: [{ id: "a" }], has_next_page: true, has_prev_page: false, page_size: 1 } }),
+      json(200, { status: "success", contacts: { has_next_page: false, has_prev_page: false, page_size: 1 } }),
+      json(200, { status: "success", contacts: { data: [{ id: "a" }], has_prev_page: false, page_size: 1 } }),
+    ];
+    for (const response of pages) {
+      const c = createClient({ apiKey: "k", fetch: fakeFetch(response).fetch });
+      const seen: string[] = [];
+      const error = await rejection(
+        (async () => {
+          for await (const contact of paginate(c.crm.contacts.list, {})) seen.push(contact.id);
+        })(),
+      );
+      assert.ok(error instanceof ProtocolError, String(error));
+      assert.deepEqual(seen, []);
+    }
   });
 
   it("refuses an operation without pagination", async () => {
