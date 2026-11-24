@@ -43,8 +43,8 @@ import { createClient } from "@gatherdeal/sdk";
 export default {
   async fetch(request: Request, env: { GATHERDEAL_API_KEY: string }) {
     const client = createClient({ apiKey: env.GATHERDEAL_API_KEY });
-    const { outlets } = await client.identity.outlets.list({ count: 10 });
-    return Response.json(outlets.data);
+    const { contacts } = await client.crm.contacts.list({ count: 10 });
+    return Response.json(contacts.data);
   },
 };
 ```
@@ -67,7 +67,9 @@ Every operation is a method under its service, named after its public id:
 
 Each method takes one flat input object holding the path, query, header and
 body members under their API names, and an optional second argument with
-per-call options:
+per-call options. Required members that are missing, path values that are
+empty, `.` or `..`, and members an operation does not take throw a
+`TypeError` before any request:
 
 ```ts
 await client.crm.contactTags.assign(
@@ -79,7 +81,7 @@ await client.crm.contactTags.assign(
 | Call option      | Meaning                                                      |
 | ---------------- | ------------------------------------------------------------ |
 | `signal`         | Aborts the call; the abort reason is thrown as is.           |
-| `timeoutMs`      | Time limit of each attempt.                                  |
+| `timeoutMs`      | Time limit of the whole call, retries and token refresh included. |
 | `retries`        | Additional attempts after the first (overrides the client).  |
 | `idempotencyKey` | Idempotency-Key of a keyed write (see below).                |
 
@@ -103,18 +105,24 @@ does not list yet, so keep a default branch in `switch` statements.
 
 | Option                    | Use                                                                 |
 | ------------------------- | ------------------------------------------------------------------- |
-| `apiKey: string`          | An organization API key. Server-side only.                           |
+| `apiKey: string`          | An organization API key. Server-side only. Operations that do not admit organization keys answer with a problem. |
 | `token: () => string \| Promise<string>` | An access token. Called before each call, and once more after a 401 so you can return a refreshed token. |
 | neither                   | Anonymous calls, for operations that admit them (e.g. listing outlets). |
 
 Both are sent as `Authorization: Bearer …`. Requests never carry cookies
 (`credentials: "omit"`).
 
-**API keys in browsers.** Anyone who opens a page can read a key shipped in
-it. `createClient({ apiKey })` therefore throws in a browser, web worker or
-service worker. Call the API from your server instead, or use per-user
-tokens. If you understand the risk (an internal tool on a trusted machine),
-pass `dangerouslyAllowBrowser: true`.
+**Organization keys stay on your server.** Anyone who opens a page can read
+a key shipped in it. `createClient({ apiKey })` therefore throws in a
+browser, web worker or service worker unless you pass
+`dangerouslyAllowBrowser: true`. The check applies to the `apiKey` option
+only: the SDK cannot tell what a `token` callback returns, so never return an
+organization key from it in browser code. Call the API from your server
+instead, or use per-user tokens.
+
+Tokens and keys must be visible ASCII without spaces; anything else throws
+before a request is sent. Errors never contain the credential, the request
+or its headers, or the original error of a custom `fetch` or token provider.
 
 Other client options:
 
@@ -122,8 +130,13 @@ Other client options:
 | ----------- | ------------------------------- | --------------------------------------------- |
 | `fetch`     | `globalThis.fetch`              | The fetch implementation to use.              |
 | `baseUrl`   | the production URL per service  | e.g. `{ crm: "https://api.gatherdeal.ai/crm" }` |
-| `retries`   | `2`                             | Additional attempts for retryable failures.   |
-| `timeoutMs` | `30000`                         | Time limit of each attempt.                   |
+| `allowLoopbackHttp` | `false`                 | Allows `http://` base URLs on `localhost`, `127.0.0.0/8` and `[::1]`. |
+| `retries`   | `2`                             | Additional attempts for retryable failures; a non-negative integer. |
+| `timeoutMs` | `60000`                         | Time limit of each call, retries and token refresh included. |
+
+Base URLs are checked when the client is created: each must be an absolute
+`https://` URL without credentials, query or fragment. Plain `http://` is
+accepted only for a loopback host and only with `allowLoopbackHttp: true`.
 
 **Redirects.** The SDK never follows a redirect. A 3xx answer fails with a
 `ProtocolError` and the credential is not sent to the new location.
@@ -136,10 +149,14 @@ Other client options:
 | `StatusError`     | A non-2xx answer without a problem document, e.g. from a gateway.     |
 | `ProtocolError`   | A redirect, a malformed problem document, or a success response that lacks what the operation promises. |
 | `ConnectionError` | The request did not complete (network, DNS, TLS, blocked by CORS).    |
-| `TimeoutError`    | An attempt exceeded `timeoutMs`.                                      |
+| `TimeoutError`    | The call exceeded `timeoutMs`.                                        |
+| `CredentialError` | The `token` callback threw or returned an unusable token.             |
 
-All extend `GatherDealError`, which carries `operation` (the public id) and
-`idempotencyKey`. `ApiError` adds:
+`StatusError` carries `status`, `correlationId` and `retryAfterMs`; its body
+is not kept, since gateways answer with HTML or plain text.
+
+All extend `GatherDealError`, which carries `operation` (the public id),
+`attempt` and `idempotencyKey`. `ApiError` adds:
 
 - `status`, `code` (e.g. `"CRM_CONTACT_NOT_FOUND"`), `title`, `detail`
 - `retryable` and `retryAfterMs`
@@ -180,16 +197,19 @@ A call is serialized once; every attempt sends the same URL, headers and body.
 The SDK retries a failed attempt only when the operation is safe to repeat:
 
 - Reads and other operations marked safe, and keyed writes (below), are
-  retried after a connection error, a timeout, a problem marked `retryable`,
-  or a 429, 502, 503 or 504 without a problem document.
-- Writes without replay protection are never retried.
-- Problems marked non-retryable are never retried.
-- The wait honours `retry_after_ms` and `Retry-After`; a wait longer than a
-  minute is not taken and the error is thrown instead. Otherwise it backs off
-  exponentially with jitter.
+  retried after a connection error, a retryable problem, or a 429, 502, 503
+  or 504 without a problem document.
+- Whether a problem is retryable comes from the SDK's error catalog for codes
+  it knows, and from the problem's `retryable` member for newer codes.
+- Writes without replay protection are never retried. A 401 is never retried
+  except for the single token refresh described below.
+- The wait is the longer of `retry_after_ms` and `Retry-After`, or an
+  exponential backoff with jitter. A wait longer than a minute, or one that
+  would pass the call's deadline, is not taken and the error is thrown.
 
 All attempts of a call, including the token refresh after a 401, share one
-budget of `1 + retries` attempts. Set `retries: 0` to make exactly one attempt.
+budget of `1 + retries` attempts and one `timeoutMs` deadline. Set
+`retries: 0` to make exactly one attempt.
 
 ## Idempotency
 
@@ -206,8 +226,9 @@ await client.whatsapp.messages.create(input, { idempotencyKey: key });
 ```
 
 Every error thrown by a keyed write carries the key in `error.idempotencyKey`.
-Passing `idempotencyKey` to an operation that does not support it throws a
-`TypeError`.
+A key must be 1 to 255 visible ASCII characters without spaces. Passing an
+invalid key, or a key to an operation that does not support it, throws a
+`TypeError` before any request.
 
 **Token refresh and writes.** After a 401, a read is always replayed with a
 fresh token. A write is replayed only if the 401 answered its first attempt;
@@ -258,7 +279,9 @@ if (contacts.next_cursor !== undefined) {
 }
 ```
 
-`paginate` iterates every item, following the cursor from page to page:
+`paginate` iterates every item, following the cursor from page to page. A
+page without its item list, or one that announces a next page without a new
+cursor, throws `ProtocolError` before any of its items is yielded:
 
 ```ts
 import { paginate } from "@gatherdeal/sdk";

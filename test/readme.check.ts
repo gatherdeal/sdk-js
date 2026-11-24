@@ -16,9 +16,12 @@ export async function examples(): Promise<void> {
   const { contacts } = await client.crm.contacts.list({ q: "tan", count: 20 });
   for (const contact of contacts.data) console.log(contact.id);
 
-  const { outlets } = await client.identity.outlets.list({ count: 10 });
+  const worker = await client.crm.contacts.list({ count: 10 });
+  void worker.contacts.data;
+  const { outlets } = await createClient().identity.outlets.list({ count: 10 });
   const first: Outlet | null | undefined = outlets.data[0];
   void first;
+  createClient({ apiKey, baseUrl: { crm: "http://localhost:5005" }, allowLoopbackHttp: true, timeoutMs: 60_000 });
 
   const browser = createClient({ token: () => getAccessToken() });
   const { deal } = await browser.crm.deals.get({ id: dealId });
