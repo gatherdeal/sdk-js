@@ -1,0 +1,7 @@
+{
+  "allowOrigin": "*",
+  "allowMethods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  "allowHeaders": ["Accept", "Authorization", "Content-Type", "Idempotency-Key", "If-Match"],
+  "exposeHeaders": ["Retry-After", "X-Correlation-Id"],
+  "maxAge": 600
+}
