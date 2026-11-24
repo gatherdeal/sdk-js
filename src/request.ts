@@ -58,9 +58,14 @@ export function serializeRequest(
     }
     const encoded = encode(op, p, value);
     switch (p.in) {
-      case "path":
-        path = path.replace(`{${p.name}}`, encodeURIComponent(encoded[0]!));
+      case "path": {
+        const segment = encoded[0]!;
+        if (segment === "" || segment === "." || segment === "..") {
+          throw new TypeError(`${op.id}: ${p.member} must not be empty, "." or ".."`);
+        }
+        path = path.replace(`{${p.name}}`, encodeURIComponent(segment));
         break;
+      }
       case "query":
         for (const v of encoded) query.append(p.name, v);
         break;
