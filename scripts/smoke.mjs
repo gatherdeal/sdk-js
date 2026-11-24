@@ -50,7 +50,8 @@ function resolvable(specifier) {
 async function chromiumAvailable() {
   if (!resolvable("playwright-core")) return "playwright-core is not installed (npm ci --prefix smoke)";
   if (chromiumExecutable !== undefined) return existsSync(chromiumExecutable) ? true : `${chromiumExecutable} not found`;
-  const { chromium } = await import(pathToFileURL(harness.resolve("playwright-core")).href);
+  const playwright = await import(pathToFileURL(harness.resolve("playwright-core")).href);
+  const chromium = playwright.chromium ?? playwright.default.chromium;
   return existsSync(chromium.executablePath()) ? true : "no Chromium for playwright-core (npx playwright-core install chromium)";
 }
 
