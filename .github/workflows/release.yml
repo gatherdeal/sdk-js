@@ -1,5 +1,7 @@
 name: release
 
+# Builds, tests and publishes one version to npm with provenance, then creates the GitHub release.
+
 on:
   workflow_dispatch:
     inputs:
