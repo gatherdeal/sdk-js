@@ -1,29 +1,21 @@
 // Type-checked against the installed package with strict settings.
-import { createClient, isApiError, paginate, type ApiError, type Client } from "@gatherdeal/sdk";
-import type { Deal, ProblemDetails } from "@gatherdeal/sdk/crm";
-import type { OutletsListInput } from "@gatherdeal/sdk/identity";
-import type { MessagesCreateInput } from "@gatherdeal/sdk/whatsapp";
+import { createClient, isAPIError, type Client } from "@gatherdeal/sdk";
+import type { Outlet, OutletListParams, ProblemDetails } from "@gatherdeal/sdk/identity";
 
 export async function consumer(token: () => Promise<string>): Promise<string[]> {
   const client: Client = createClient({ token });
-  const { deal }: { deal: Deal } = await client.crm.deals.get({ id: "d1" });
+  const outlet: Outlet = await client.identity.outlets.get("o1");
   try {
-    await client.crm.deals.update({ id: deal.id, if_match: deal.revision });
+    await client.identity.outlets.list({ limit: 10 });
   } catch (error) {
-    if (client.crm.deals.update.isError(error, "PRECONDITION_FAILED")) {
-      const e: ApiError<"PRECONDITION_FAILED"> = error;
-      void e;
-    }
-    if (client.crm.isError(error, "CRM_CONTACT_EXPANSION_LIMIT")) {
-      const details: ProblemDetails["CRM_CONTACT_EXPANSION_LIMIT"] = error.details;
+    if (client.identity.isError(error, "PAGINATION_PARAMS_INVALID")) {
+      const details: ProblemDetails["PAGINATION_PARAMS_INVALID"] = error.details;
       void details;
     }
-    if (isApiError(error)) throw error;
+    if (isAPIError(error)) throw error;
   }
-  const input: OutletsListInput = { limit: 10 };
-  const names: string[] = [];
-  for await (const outlet of paginate(client.identity.outlets.list, input)) if (outlet !== null) names.push(outlet.id);
-  const message: Partial<MessagesCreateInput> = {};
-  void message;
+  const input: OutletListParams = { limit: 10 };
+  const names = [outlet.id];
+  for await (const item of client.identity.outlets.list(input)) names.push(item.id);
   return names;
 }

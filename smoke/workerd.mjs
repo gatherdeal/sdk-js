@@ -21,27 +21,27 @@ const target = await listen((_req, res) => {
   res.end("{}");
 });
 const origin = await listen((req, res) => {
-  if (req.url === "/v1/contacts/ok") {
-    res.writeHead(200, { "Content-Type": "application/json" }).end('{"status":"success","contact":{"id":"ok"}}');
+  if (req.url === "/v1/outlets/ok") {
+    res.writeHead(200, { "Content-Type": "application/json" }).end('{"status":"success","outlet":{"id":"ok"}}');
   } else {
-    res.writeHead(302, { Location: `${target.url}/v1/contacts/x` }).end();
+    res.writeHead(302, { Location: `${target.url}/v1/outlets/x` }).end();
   }
 });
 
 const worker = `
-import { createClient, ProtocolError } from "./sdk/index.js";
+import { createClient, InvalidResponseError } from "./sdk/index.js";
 export default {
   async fetch(request) {
     const origin = new URL(request.url).searchParams.get("origin");
-    const client = createClient({ apiKey: "secret", baseUrl: { crm: origin }, allowLoopbackHttp: true, retries: 0 });
-    const ok = await client.crm.contacts.get({ id: "ok" });
+    const client = createClient({ apiKey: "secret", baseUrl: { identity: origin }, allowLoopbackHttp: true, retries: 0 });
+    const ok = await client.identity.outlets.get("ok");
     let error;
     try {
-      await client.crm.contacts.get({ id: "redirect" });
+      await client.identity.outlets.get("redirect");
     } catch (e) {
       error = e;
     }
-    return Response.json({ ok: ok.contact.id, refused: error instanceof ProtocolError, error: String(error) });
+    return Response.json({ ok: ok.id, refused: error instanceof InvalidResponseError, error: String(error) });
   },
 };
 `;

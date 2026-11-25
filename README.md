@@ -1,15 +1,11 @@
 # GatherDeal JavaScript SDK
 
-`@gatherdeal/sdk` is a typed client for the GatherDeal API: CRM contacts, tags,
-contact logs, deals and pipelines; outlets; and WhatsApp agents, chats,
-messages, templates and broadcasts.
+`@gatherdeal/sdk` is a typed client for the GatherDeal API. This version
+exposes the Identity outlet operations. The CRM and WhatsApp operations are
+temporarily unavailable while their SDK contracts are updated.
 
-- Runs unchanged in Node.js 22+, Bun, Deno, Cloudflare Workers and browsers.
-- Uses only Web-standard APIs (`fetch`, `URL`, `AbortSignal`, `crypto`); no
-  runtime dependencies, no Node.js built-ins, no environment variables.
-- ESM only, with TypeScript types for every input, output and error code.
-
-> The SDK is at 0.x: minor versions may change the API. Pin an exact version.
+The SDK uses Web-standard APIs and has no runtime dependencies. It is ESM and
+runs in Node.js 22+, Bun, Deno, Cloudflare Workers and browsers.
 
 ## Install
 
@@ -17,306 +13,123 @@ messages, templates and broadcasts.
 npm install @gatherdeal/sdk
 ```
 
-Deno can import it directly: `import { createClient } from "npm:@gatherdeal/sdk";`
+Deno also supports `import { createClient } from "npm:@gatherdeal/sdk"`.
 
-## Quick start
-
-### Node.js, Bun and Deno
+## Call the API
 
 ```ts
 import { createClient } from "@gatherdeal/sdk";
 
-const client = createClient({ apiKey: process.env.GATHERDEAL_API_KEY });
-
-const { contacts } = await client.crm.contacts.list({ q: "tan", limit: 20 });
-for (const contact of contacts.data) console.log(contact.id);
+const client = createClient({ apiKey });
+const outlet = await client.identity.outlets.get("outlet-id");
+console.log(outlet.id);
 ```
 
-The SDK never reads environment variables itself; pass the key explicitly
-(`Deno.env.get(...)` in Deno, `Bun.env` in Bun).
+Pass the leaf path ID first, query and body params next, and call options last.
+For example, `get(id, { with_owner: true }, { maxRetries: 0 })` includes the
+outlet owner and makes one attempt. Import resource and param types from the
+service module, such as `@gatherdeal/sdk/identity`.
 
-### Cloudflare Workers
+Awaiting a call returns the resource, page or receipt described by the
+operation. Bodyless operations resolve to `undefined`. To read the HTTP
+response and request ID with the result, use `withResponse()`.
 
 ```ts
-import { createClient } from "@gatherdeal/sdk";
-
-export default {
-  async fetch(request: Request, env: { GATHERDEAL_API_KEY: string }) {
-    const client = createClient({ apiKey: env.GATHERDEAL_API_KEY });
-    const { contacts } = await client.crm.contacts.list({ limit: 10 });
-    return Response.json(contacts.data);
-  },
-};
+const call = client.identity.outlets.list({ limit: 20 });
+const { data: page, response, requestID } = await call.withResponse();
+console.log(page.data.length, response.status, requestID);
 ```
 
-### Browsers
-
-In a browser, use a per-user access token, never an organization API key:
-
-```ts
-import { createClient } from "@gatherdeal/sdk";
-
-const client = createClient({ token: () => getAccessToken() });
-const { deal } = await client.crm.deals.get({ id: dealId });
-```
-
-## Calling the API
-
-Every operation is a method under its service, named after its public id:
-`crm.contact_tags.assign` is `client.crm.contactTags.assign(...)` and
-`whatsapp.agents.pairing.get` is `client.whatsapp.agents.pairing.get(...)`.
-
-Deprecated operations stay callable until they are removed and are marked
-`@deprecated` in the types, so editors and linters flag them; their
-documentation names the replacement.
-
-Each method takes one flat input object holding the path, query, header and
-body members under their API names, and an optional second argument with
-per-call options. Required members that are missing, path values that are
-empty, `.` or `..`, and members an operation does not take throw a
-`TypeError` before any request:
-
-```ts
-await client.crm.contactTags.assign(
-  { contact_id: "…", tag_id: "…" },
-  { signal: AbortSignal.timeout(10_000) },
-);
-```
-
-| Call option      | Meaning                                                      |
-| ---------------- | ------------------------------------------------------------ |
-| `signal`         | Aborts the call; the abort reason is thrown as is.           |
-| `timeoutMs`      | Time limit of the whole call, retries and token refresh included. |
-| `retries`        | Additional attempts after the first (overrides the client).  |
-| `idempotencyKey` | Idempotency-Key of a keyed write (see below).                |
-
-The result is the response body as the API defines it, with API field names
-(`snake_case`). Any 2xx status is a success. Operations that answer without a
-body (`204 No Content`) resolve to `undefined`.
-
-Types of inputs, outputs and resources are exported per service:
-
-```ts
-import type { Deal, DealsUpdateInput } from "@gatherdeal/sdk/crm";
-import type { Outlet } from "@gatherdeal/sdk/identity";
-import type { MessagesCreateInput } from "@gatherdeal/sdk/whatsapp";
-```
-
-Enumerations in responses are open: a newer server can send a value the SDK
-does not list yet, so keep a default branch in `switch` statements.
+`asResponse()` returns the HTTP response alone. Both methods rebuild a
+response from the buffered text, original status and headers. Each view has
+its own readable body. Awaiting or iterating the same call reuses its
+execution.
 
 ## Authentication
 
-`createClient` accepts one credential:
+Use `createClient({ apiKey })` with an organization key on your server. In
+browsers, use `createClient({ token: () => getAccessToken() })` with a per-user
+access token. The SDK can call the provider again after a 401 if another
+attempt is available. Credentials go in the bearer header, and requests omit
+cookies. The SDK refuses browser API keys unless `dangerouslyAllowBrowser`
+is explicitly enabled. Pass credentials explicitly. Outlet reads also
+support anonymous calls with `createClient()`.
 
-| Option                    | Use                                                                 |
-| ------------------------- | ------------------------------------------------------------------- |
-| `apiKey: string`          | An organization API key. Server-side only. Operations that do not admit organization keys answer with a problem. |
-| `token: () => string \| Promise<string>` | An access token. Called before each call, and once more after a 401 so you can return a refreshed token. |
-| neither                   | Anonymous calls, for operations that admit them (e.g. listing outlets). |
+Supply a custom fetch implementation with `fetch`, and override the service
+URL with `baseUrl: { identity: "https://example.com/identity" }`. URLs must
+be absolute HTTPS URLs without credentials, queries or fragments. For loopback
+HTTP, set `allowLoopbackHttp: true`.
 
-Both are sent as `Authorization: Bearer …`. Requests never carry cookies
-(`credentials: "omit"`).
+## Timeouts and retries
 
-**Organization keys stay on your server.** Anyone who opens a page can read
-a key shipped in it. `createClient({ apiKey })` therefore throws in a
-browser, web worker or service worker unless you pass
-`dangerouslyAllowBrowser: true`. The check applies to the `apiKey` option
-only: the SDK cannot tell what a `token` callback returns, so never return an
-organization key from it in browser code. Call the API from your server
-instead, or use per-user tokens.
+Use per-call `timeout` and `maxRetries` to override the client's
+`timeoutMs` and `retries` defaults. The default is two retries with a
+60-second timeout per attempt, including token acquisition and response
+reading. Pass a `signal` to bound the whole call, including waits between
+attempts.
 
-Tokens and keys must be visible ASCII without spaces; anything else throws
-before a request is sent. Errors never contain the credential, the request
-or its headers, or the original error of a custom `fetch` or token provider.
+```ts
+await client.identity.outlets.list(
+  { limit: 20 },
+  { maxRetries: 0, signal: AbortSignal.timeout(10_000) },
+);
+```
 
-Other client options:
+GET requests and keyed writes can retry connection failures, timeouts,
+retryable problems and HTTP 429, 502, 503 or 504. If a token provider is
+configured, one 401 can trigger an immediate refresh within the same attempt
+budget. Other automatic retries of writes require an idempotency key. The SDK
+generates a key for a keyed write and reuses it on every attempt. Supply your
+own key when you need to persist it across calls.
 
-| Option      | Default                         | Meaning                                       |
-| ----------- | ------------------------------- | --------------------------------------------- |
-| `fetch`     | `globalThis.fetch`              | The fetch implementation to use.              |
-| `baseUrl`   | the production URL per service  | e.g. `{ crm: "https://api.gatherdeal.ai/crm" }` |
-| `allowLoopbackHttp` | `false`                 | Allows `http://` base URLs on `localhost`, `127.0.0.0/8` and `[::1]`. |
-| `retries`   | `2`                             | Additional attempts for retryable failures; a non-negative integer. |
-| `timeoutMs` | `60000`                         | Time limit of each call, retries and token refresh included. |
-
-Base URLs are checked when the client is created: each must be an absolute
-`https://` URL without credentials, query or fragment. Plain `http://` is
-accepted only for a loopback host and only with `allowLoopbackHttp: true`.
-
-**Redirects.** The SDK never follows a redirect. A 3xx answer fails with a
-`ProtocolError` and the credential is not sent to the new location.
+The longer of `Retry-After` and `retry_after_ms` takes precedence over
+exponential backoff with jitter. If the server requests more than 60 seconds,
+the SDK throws the error.
 
 ## Errors
 
-| Class             | When                                                                 |
-| ----------------- | -------------------------------------------------------------------- |
-| `ApiError`        | The API answered with a problem document (`application/problem+json`). |
-| `StatusError`     | A non-2xx answer without a problem document, e.g. from a gateway.     |
-| `ProtocolError`   | A redirect, a malformed problem document, or a success response that lacks what the operation promises. |
-| `ConnectionError` | The request did not complete (network, DNS, TLS, blocked by CORS).    |
-| `TimeoutError`    | The call exceeded `timeoutMs`.                                        |
-| `CredentialError` | The `token` callback threw or returned an unusable token.             |
+`APIError` carries the status, response headers, request ID from
+`X-Correlation-Id`, operation and attempt. When the server returns a valid
+problem document, the error includes its code, details, violations and raw
+`problem`. Use `isAPIError(error, code?)` to narrow any HTTP error or the
+service or method's `isError(error, code?)` to narrow declared problem codes
+and their details.
 
-`StatusError` carries `status`, `correlationId` and `retryAfterMs`; its body
-is not kept, since gateways answer with HTML or plain text.
+| Error | When it is thrown |
+| --- | --- |
+| `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `ConflictError` | HTTP 400, 401, 403, 404 and 409 respectively |
+| `PreconditionFailedError`, `UnprocessableEntityError`, `RateLimitError` | HTTP 412, 422 and 429 respectively |
+| `InternalServerError` | HTTP 5xx |
+| `APIError` | Other HTTP errors, including 426 and 428 |
+| `InvalidResponseError` | A malformed success response or a refused redirect |
+| `APIConnectionError`, `APIConnectionTimeoutError`, `APIUserAbortError` | A connection failure, an attempt timeout or cancellation by the caller |
+| `OutcomeUnknownError` | An unkeyed conditional write may have reached the server, but the SDK cannot determine its outcome |
 
-All extend `GatherDealError`, which carries `operation` (the public id),
-`attempt` and `idempotencyKey`. `ApiError` adds:
-
-- `status`, `code` (e.g. `"CRM_CONTACT_NOT_FOUND"`), `title`, `detail`
-- `retryable` and `retryAfterMs`
-- `correlationId`: the `X-Correlation-Id` of the response; quote it when you
-  contact support
-- `details`: code-specific details; `violations`: field errors of
-  `VALIDATION_FAILED`
-- `raw`: the whole problem document
-
-Narrow errors with the guards. They take `unknown`, so they work directly on
-a caught value, and narrow `details` to the code's type after checking it:
-
-```ts
-try {
-  await client.crm.contacts.list({ with_tags: true });
-} catch (error) {
-  if (client.crm.contacts.list.isError(error, "CRM_CONTACT_EXPANSION_LIMIT")) {
-    console.log(error.details.limit); // number
-  } else if (client.crm.isError(error, "CRM_CONTACT_NOT_FOUND")) {
-    // any crm operation
-  } else if (isApiError(error)) {
-    console.log(error.code, error.correlationId);
-  }
-  throw error;
-}
-```
-
-- `client.<service>.<…>.<method>.isError(error, code?)`: a problem this
-  operation declares.
-- `client.<service>.isError(error, code?)`: a problem from any operation of the
-  service.
-- `isApiError(error, code?)`: any problem, including codes newer than your SDK
-  version.
-
-## Retries
-
-A call is serialized once; every attempt sends the same URL, headers and body.
-The SDK retries a failed attempt only when the operation is safe to repeat:
-
-- Reads and other operations marked safe, and keyed writes (below), are
-  retried after a connection error, a retryable problem, or a 429, 502, 503
-  or 504 without a problem document.
-- Whether a problem is retryable comes from the SDK's error catalog for codes
-  it knows, and from the problem's `retryable` member for newer codes.
-- Writes without replay protection are never retried. A 401 is never retried
-  except for the single token refresh described below.
-- The wait is the longer of `retry_after_ms` and `Retry-After`, or an
-  exponential backoff with jitter. A wait longer than a minute, or one that
-  would pass the call's deadline, is not taken and the error is thrown.
-
-All attempts of a call, including the token refresh after a 401, share one
-budget of `1 + retries` attempts and one `timeoutMs` deadline. Set
-`retries: 0` to make exactly one attempt.
-
-## Idempotency
-
-Writes that support it carry an `Idempotency-Key`. The SDK generates one
-random key per call and sends it on every attempt of that call, so a retry
-cannot apply the write twice.
-
-To survive a crash or a restart, create the key yourself, store it with the
-work item, and pass it on every try:
-
-```ts
-const key = crypto.randomUUID(); // persist with the job
-await client.whatsapp.messages.create(input, { idempotencyKey: key });
-```
-
-Every error thrown by a keyed write carries the key in `error.idempotencyKey`.
-A key must be 1 to 255 visible ASCII characters without spaces. Passing an
-invalid key, or a key to an operation that does not support it, throws a
-`TypeError` before any request.
-
-**Token refresh and writes.** After a 401, a read is always replayed with a
-fresh token. A write is replayed only if the 401 answered its first attempt;
-if an earlier attempt may have reached the server (a timeout or a connection
-error), the 401 is thrown with the idempotency key so you can retry
-deliberately.
-
-## Outlet selection
-
-Operations that act within outlets accept an optional `outlet_id`. Omit it to
-act in every outlet the credential may use, or pass one to act in that
-outlet:
-
-```ts
-await client.crm.contacts.list({ outlet_id: outletId, limit: 50 });
-```
-
-## Conditional writes
-
-Updates of deals and WhatsApp agents are conditional. Read the resource, pass
-its `revision` unchanged as `if_match` (it is a quoted entity tag, sent as the
-`If-Match` header), and use the `revision` of the answer for the next write:
-
-```ts
-const { deal } = await client.crm.deals.get({ id });
-try {
-  const { revision } = await client.crm.deals.update({
-    id,
-    if_match: deal.revision,
-    stage_id: nextStageId,
-    remark: "Called back",
-  });
-} catch (error) {
-  if (client.crm.deals.update.isError(error, "PRECONDITION_FAILED")) {
-    // Someone changed the deal: read it again and retry.
-  }
-  throw error;
-}
-```
-
-`if_match` is a required member, so a missing revision is a type error and a
-`TypeError` before any request. A stale revision fails with
-`PRECONDITION_FAILED` (412); a request without one fails with
-`PRECONDITION_REQUIRED` (428).
+For conditional writes, pass `{ ifMatch: resource.revision }` in the call
+options and reuse the returned revision on the next write. On 412, read the
+resource again before applying the change. On `OutcomeUnknownError`, read
+the resource using the operation in `error.readOperation` and compare the
+fields you intended to change. If your values are in place, continue with the
+new revision. Otherwise reapply the change with the fresh revision. The
+server accepts wildcards and revision lists in `If-Match`. A single revision
+from the read gives the strongest protection.
 
 ## Pagination
 
-List operations take the page parameters as the API defines them and return
-one page:
-
-| Member            | Meaning                                                          |
-| ----------------- | ---------------------------------------------------------------- |
-| `limit`           | Items per page.                                                  |
-| `after`, `before` | Cursors from a previous page's `next_cursor` or `prev_cursor`.   |
-| `page`            | A 1-based page number, instead of a cursor.                      |
-| `total`           | `"exact"` to count the matching items, `"none"` to skip it.      |
-| `sort`            | Comma-separated fields, ascending unless prefixed with `-`, e.g. `"-create_at,name"`. |
+Await a list call for its first page. A page provides `data`,
+`hasNextPage()`, `getNextPage()` and `iterPages()`. Iterate over a list
+call directly to visit its items across all pages.
 
 ```ts
-const { contacts } = await client.crm.contacts.list({ limit: 100, sort: "name" });
-if (contacts.next_cursor !== undefined) {
-  await client.crm.contacts.list({ limit: 100, sort: "name", after: contacts.next_cursor });
+for await (const outlet of client.identity.outlets.list({ limit: 20 })) {
+  console.log(outlet.id);
 }
 ```
 
-`paginate` iterates every item, following the cursor from page to page. A
-page without its item list, or one that announces a next page without a new
-cursor, throws `ProtocolError` before any of its items is yielded:
-
-```ts
-import { paginate } from "@gatherdeal/sdk";
-
-for await (const contact of paginate(client.crm.contacts.list, { limit: 100 })) {
-  console.log(contact.id);
-}
-```
-
-## Versioning
-
-The package follows semantic versioning; at 0.x a minor release may change
-the API. Each release lists the API operations it adds or removes. The API
-version is part of each service (all services are at v1).
+To resume, pass the original params and `after: page.next_cursor`, omitting
+`before` or `page`. In numbered mode the SDK can continue using the
+current page number when the server omits a cursor. Invalid or repeated
+continuation cursors raise `InvalidResponseError`.
 
 ## License
 

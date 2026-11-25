@@ -55,14 +55,34 @@ const api = await listen("localhost", (req, res) => {
 
 const page = `<!doctype html><meta charset="utf-8"><script type="module">
 import { createClient } from "/sdk/index.js";
+import { bindOperation } from "/sdk/bind.js";
+
+const binding = {
+  baseUrl: ${JSON.stringify(api.url)},
+  problems: {},
+  config: { fetch: globalThis.fetch.bind(globalThis), authorization: "Bearer t", timeout: 60000, maxRetries: 0 },
+};
+const operation = {
+  parameters: [], body: "required", result: { kind: "object" },
+  authentication: "required", organizationKeys: false, errors: [],
+};
+const create = bindOperation({
+  ...operation, id: "test.contacts.create", method: "POST", path: "/v1/contacts",
+  idempotency: "keyed", success: { status: 201, body: "json", required: ["id", "status"] },
+}, binding);
+const update = bindOperation({
+  ...operation, id: "test.deals.update", method: "PATCH", path: "/v1/deals/{id}", positional: "id",
+  idempotency: "none", conditional: { read: "test.deals.get" },
+  success: { status: 200, body: "json", required: ["revision", "status"] },
+}, binding);
 const result = {};
 try {
   try { createClient({ apiKey: "k" }); result.apiKeyGuard = false; } catch { result.apiKeyGuard = true; }
-  const client = createClient({ token: () => "t", baseUrl: { crm: ${JSON.stringify(api.url)} }, allowLoopbackHttp: true, retries: 0 });
-  result.created = (await client.crm.contacts.create({ name: "Tan" })).id;
-  result.revision = (await client.crm.deals.update({ id: "d1", if_match: '"r1"', remark: "x" })).revision;
-  try { await client.crm.contacts.get({ id: "missing" }); } catch (e) {
-    result.code = e.code; result.correlationId = e.correlationId; result.retryAfterMs = e.retryAfterMs;
+  const client = createClient({ token: () => "t", baseUrl: { identity: ${JSON.stringify(api.url)} }, allowLoopbackHttp: true, retries: 0 });
+  result.created = (await create({ name: "Tan" })).id;
+  result.revision = (await update("d1", { remark: "x" }, { ifMatch: '"r1"' })).revision;
+  try { await client.identity.outlets.get("missing"); } catch (e) {
+    result.code = e.code; result.correlationId = e.requestID; result.retryAfterMs = e.retryAfterMs;
   }
 } catch (e) { result.error = String(e); }
 window.__result = result;
