@@ -1,11 +1,11 @@
 {
   "format_version": 1,
-  "set": "sha256:50a1d5c1c6120ec48e8c5872467e67238dcb293ba92ae40736b7e36cd2afb533",
+  "set": "sha256:632d08fb17c4f30e5a3058330a2b0fc66c20e4ea98c077c28b5e4bab4257ce79",
   "services": [
     {
       "service": "crm",
       "version": "v1",
-      "contract_sha256": "a1cec1d2f5498b975ac04fb25c8716bbd8d5be6caa6d037729fa680bff615424",
+      "contract_sha256": "778bb153e4d6cf7aa261902e76e92c271540578fc7fa948f3cba2cb6f221c9c6",
       "public_ids": [
         "crm.contact_logs.create",
         "crm.contact_logs.list",
@@ -27,7 +27,7 @@
     {
       "service": "identity",
       "version": "v1",
-      "contract_sha256": "2ea3c1afc96d36024844a010b37bf777f72021e10500d74f370982b22b92b474",
+      "contract_sha256": "4fa3ae5bbd5b2dc6e63edf01c0c05b093361d6a5f721b5063552332e60ddebfa",
       "public_ids": [
         "identity.outlets.list"
       ]
@@ -35,7 +35,7 @@
     {
       "service": "whatsapp",
       "version": "v1",
-      "contract_sha256": "54039bc710c3fa8394a018832b433add33d9eb9fedd446fbd4b21d8f160bc68c",
+      "contract_sha256": "6c835ca5b2711d2c67a8b4126a6f931abe308edd500903c0e195142026d36cc8",
       "public_ids": [
         "whatsapp.agents.create",
         "whatsapp.agents.delete",
@@ -82,18 +82,18 @@
     },
     {
       "path": "crm/v1/index.ts",
-      "sha256": "9c19243e540925cf18a424265329517cc9455dda1eafe693d92a1135b7fac458",
-      "size": 3931
+      "sha256": "ea508f037caf4c0095310852da7dae2f5fefa67f7fbf1f6721e739a19949ab27",
+      "size": 4341
     },
     {
       "path": "crm/v1/operations.ts",
-      "sha256": "f55f7228103e69a93e0d691c45432251678cd280e44fe6d15dbe7a976cd274c2",
-      "size": 60574
+      "sha256": "5eb6b6e7d38981af99674bb10b886a99e8f73cda47534efeb1a257245b2fbe11",
+      "size": 60744
     },
     {
       "path": "crm/v1/types.ts",
-      "sha256": "4617d99c6fca15629d597cbcb878129b3809cdbea15bb38b01fd1a506b9e146b",
-      "size": 59363
+      "sha256": "aec91e65154b7914a7fcbc3a448dfcec70750c524fce70880a3811d770e23d3b",
+      "size": 59427
     },
     {
       "path": "identity/v1/errors.ts",

@@ -1884,11 +1884,13 @@ export interface InternalErrorProblem {
 }
 
 /**
- * KeyedAcknowledgment is the complete success payload persisted by a scoped route.
+ * KeyedAcknowledgment confirms a keyed write and names the resource it
+ * affected. Retrying the write with the same idempotency key returns the same
+ * acknowledgment.
  */
 export interface KeyedAcknowledgment {
   /**
-   * Identifier of the resource acknowledged by this operation.
+   * Identifier of the affected resource.
    */
   id: string;
 }

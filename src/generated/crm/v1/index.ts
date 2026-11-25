@@ -118,6 +118,8 @@ export const operations = {
      * Moves a deal to another stage of its current pipeline. If-Match must carry the revision from the deal's latest read; a stale revision fails with 412 and the caller rereads the deal before retrying. Moving to the current stage changes nothing.
      *
      * Requires the permissions `crm.deal.read`, `crm.deal.write`.
+     *
+     * Pass `if_match` as the revision at `/deal/revision` in the result of `crm.deals.get`, unchanged. A stale revision fails with `PRECONDITION_FAILED`: read again, reapply the change, and retry.
      */
     moveStage: op.dealsMoveStage,
     /**
@@ -126,6 +128,8 @@ export const operations = {
      * Changes a deal's priority, type and remark. If-Match must carry the revision from the deal's latest read; a stale revision fails with 412 and the caller rereads the deal before retrying. Values equal to the stored ones change nothing.
      *
      * Requires the permissions `crm.deal.read`, `crm.deal.write`.
+     *
+     * Pass `if_match` as the revision at `/deal/revision` in the result of `crm.deals.get`, unchanged. A stale revision fails with `PRECONDITION_FAILED`: read again, reapply the change, and retry.
      */
     update: op.dealsUpdate,
   },

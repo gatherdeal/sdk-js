@@ -1405,7 +1405,7 @@ export const dealsList: Operation<DealsListInput, DealsListOutput, DealsListErro
 
 export type DealsMoveStageInput = {
   /**
-   * Send the `revision` field returned by `crm_deals_get` unchanged as the strong ETag. A stale value returns 412 Precondition Failed, so re-fetch, re-apply the change, and retry.
+   * Pass `if_match` as the revision at `/deal/revision` in the result of `crm.deals.get`, unchanged. A stale revision fails with `PRECONDITION_FAILED`: read again, reapply the change, and retry.
    */
   if_match: string;
   /**
@@ -1462,6 +1462,7 @@ export const dealsMoveStage: Operation<DealsMoveStageInput, DealsMoveStageOutput
   idempotency: "safe",
   authentication: "required",
   organizationKeys: true,
+  ifMatch: { operation: "crm.deals.get", pointer: "/deal/revision" },
   errors: [
     "BAD_REQUEST",
     "CLIENT_CLOSED_REQUEST",
@@ -1497,7 +1498,7 @@ export const dealsMoveStage: Operation<DealsMoveStageInput, DealsMoveStageOutput
 
 export type DealsUpdateInput = {
   /**
-   * Send the `revision` field returned by `crm_deals_get` unchanged as the strong ETag. A stale value returns 412 Precondition Failed, so re-fetch, re-apply the change, and retry.
+   * Pass `if_match` as the revision at `/deal/revision` in the result of `crm.deals.get`, unchanged. A stale revision fails with `PRECONDITION_FAILED`: read again, reapply the change, and retry.
    */
   if_match: string;
   /**
@@ -1552,6 +1553,7 @@ export const dealsUpdate: Operation<DealsUpdateInput, DealsUpdateOutput, DealsUp
   idempotency: "safe",
   authentication: "required",
   organizationKeys: true,
+  ifMatch: { operation: "crm.deals.get", pointer: "/deal/revision" },
   errors: [
     "BAD_REQUEST",
     "CLIENT_CLOSED_REQUEST",
