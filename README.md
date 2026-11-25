@@ -1,8 +1,8 @@
 # GatherDeal JavaScript SDK
 
-`@gatherdeal/sdk` is a typed client for the GatherDeal API. This version
-exposes the Identity outlet operations. The CRM and WhatsApp operations are
-temporarily unavailable while their SDK contracts are updated.
+`@gatherdeal/sdk` is a typed client for the GatherDeal API. Use `client.crm`
+for contacts, tags, logs, deals, and pipelines, `client.identity` for outlets,
+and `client.whatsapp` for agents, broadcasts, chats, messages, and templates.
 
 The SDK uses Web-standard APIs and has no runtime dependencies. It is ESM and
 runs in Node.js 22+, Bun, Deno, Cloudflare Workers and browsers.
@@ -105,9 +105,20 @@ and their details.
 | `APIConnectionError`, `APIConnectionTimeoutError`, `APIUserAbortError` | A connection failure, an attempt timeout or cancellation by the caller |
 | `OutcomeUnknownError` | An unkeyed conditional write may have reached the server, but the SDK cannot determine its outcome |
 
-For conditional writes, pass `{ ifMatch: resource.revision }` in the call
-options and reuse the returned revision on the next write. On 412, read the
-resource again before applying the change. On `OutcomeUnknownError`, read
+For conditional writes, pass the resource revision in the call options and
+reuse the returned revision on the next write.
+
+```ts
+const deal = await client.crm.deals.get("deal-id");
+const { revision } = await client.crm.deals.update(
+  deal.id,
+  { remark: "Contacted the customer" },
+  { ifMatch: deal.revision },
+);
+```
+
+On 412, read the resource again before applying the change. On
+`OutcomeUnknownError`, read
 the resource using the operation in `error.readOperation` and compare the
 fields you intended to change. If your values are in place, continue with the
 new revision. Otherwise reapply the change with the fresh revision. The
@@ -130,6 +141,18 @@ To resume, pass the original params and `after: page.next_cursor`, omitting
 `before` or `page`. In numbered mode the SDK can continue using the
 current page number when the server omits a cursor. Invalid or repeated
 continuation cursors raise `InvalidResponseError`.
+
+### WhatsApp message feed
+
+Use `client.whatsapp.chatMessages.list()` to poll for new and changed
+messages. Pass the returned `after_rev` into the next call. When `has_more`
+is true, more changes are ready. To paginate messages within one chat, use
+`client.whatsapp.chats.messages.list({ chat_id })`.
+
+```ts
+const batch = await client.whatsapp.chatMessages.list({ after_rev: 0, limit: 20 });
+const next = await client.whatsapp.chatMessages.list({ after_rev: batch.after_rev, limit: 20 });
+```
 
 ## License
 

@@ -3,6 +3,16 @@ import { createClient, isAPIError } from "../src/index.js";
 
 export async function examples(apiKey: string): Promise<void> {
   const client = createClient({ apiKey });
+  const deal = await client.crm.deals.get("deal-id");
+  const { revision } = await client.crm.deals.update(
+    deal.id,
+    { remark: "Contacted the customer" },
+    { ifMatch: deal.revision },
+  );
+  const batch = await client.whatsapp.chatMessages.list({ after_rev: 0, limit: 20 });
+  const next = await client.whatsapp.chatMessages.list({ after_rev: batch.after_rev, limit: 20 });
+  void [revision, next];
+
   const outlet = await client.identity.outlets.get("outlet-id");
   const call = client.identity.outlets.list({ limit: 20 });
   const { data: page, response, requestID } = await call.withResponse();
