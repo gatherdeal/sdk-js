@@ -4,8 +4,9 @@
 for contacts, tags, logs, deals, and pipelines, `client.identity` for outlets,
 and `client.whatsapp` for agents, broadcasts, chats, messages, and templates.
 
-The SDK uses Web-standard APIs and has no runtime dependencies. It is ESM and
-runs in Node.js 22+, Bun, Deno, Cloudflare Workers and browsers.
+The SDK uses Web-standard APIs and has no runtime dependencies. It runs in
+Node.js 22.12.0 or later, Bun, Deno, Cloudflare Workers, and browsers. Use ESM
+`import` or CommonJS `require`. TypeScript 5.0 or later is supported.
 
 ## Install
 
@@ -13,17 +14,19 @@ runs in Node.js 22+, Bun, Deno, Cloudflare Workers and browsers.
 npm install @gatherdeal/sdk
 ```
 
-Deno also supports `import { createClient } from "npm:@gatherdeal/sdk"`.
+Deno also supports `import GatherDeal from "npm:@gatherdeal/sdk"`.
 
 ## Call the API
 
 ```ts
-import { createClient } from "@gatherdeal/sdk";
+import GatherDeal from "@gatherdeal/sdk";
 
-const client = createClient({ apiKey });
+const client = new GatherDeal({ apiKey });
 const outlet = await client.identity.outlets.get("outlet-id");
 console.log(outlet.id);
 ```
+
+In CommonJS, use `const { GatherDeal } = require("@gatherdeal/sdk")`.
 
 Pass the leaf path ID first, query and body params next, and call options last.
 For example, `get(id, { with_owner: true }, { maxRetries: 0 })` includes the
@@ -47,26 +50,26 @@ execution.
 
 ## Authentication
 
-Use `createClient({ apiKey })` with an organization key on your server. In
-browsers, use `createClient({ token: () => getAccessToken() })` with a per-user
-access token. The SDK can call the provider again after a 401 if another
+Use `new GatherDeal({ apiKey })` with an organization key on your server. In
+browsers, use `new GatherDeal({ accessToken: () => getAccessToken() })` with a
+per-user access token. The SDK can call the provider again after a 401 if another
 attempt is available. Credentials go in the bearer header, and requests omit
 cookies. The SDK refuses browser API keys unless `dangerouslyAllowBrowser`
-is explicitly enabled. Pass credentials explicitly. Outlet reads also
-support anonymous calls with `createClient()`.
+is explicitly enabled. With no explicit credentials, the SDK looks for
+`GATHERDEAL_API_KEY` on Node.js and Bun. On Deno it reads the variable only
+with environment permission. Pass `apiKey: null` to make anonymous outlet reads.
 
 Supply a custom fetch implementation with `fetch`, and override the service
-URL with `baseUrl: { identity: "https://example.com/identity" }`. URLs must
-be absolute HTTPS URLs without credentials, queries or fragments. For loopback
-HTTP, set `allowLoopbackHttp: true`.
+URL with `serviceBaseURLs: { identity: "https://example.com/identity" }`. URLs
+must be absolute and free of credentials, queries and fragments. HTTPS is
+required except on loopback or when you set `allowInsecureHttp: true`.
 
 ## Timeouts and retries
 
-Use per-call `timeout` and `maxRetries` to override the client's
-`timeoutMs` and `retries` defaults. The default is two retries with a
-60-second timeout per attempt, including token acquisition and response
-reading. Pass a `signal` to bound the whole call, including waits between
-attempts.
+Set `timeout` and `maxRetries` on a call to override the client defaults. The
+default is two retries with a 60-second timeout per attempt, including token
+acquisition and response reading. Pass a `signal` to bound the whole call,
+including waits between attempts.
 
 ```ts
 await client.identity.outlets.list(
