@@ -1,12 +1,13 @@
-# GatherDeal JavaScript SDK
+# GatherDeal SDK for JavaScript and TypeScript
 
-`@gatherdeal/sdk` is a typed client for the GatherDeal API. Use `client.crm`
-for contacts, tags, logs, deals, and pipelines, `client.identity` for outlets,
-and `client.whatsapp` for agents, broadcasts, chats, messages, and templates.
+Use `@gatherdeal/sdk` to call the GatherDeal API at `https://api.gatherdeal.ai`.
 
-The SDK uses Web-standard APIs and has no runtime dependencies. It runs in
-Node.js 22.12.0 or later, Bun, Deno, Cloudflare Workers, and browsers. Use ESM
-`import` or CommonJS `require`. TypeScript 5.0 or later is supported.
+## Requirements
+
+- Node.js 22.12.0 or later, Bun, Deno, Cloudflare Workers, or a modern browser.
+- TypeScript 5.0 or later, if you use TypeScript.
+
+The SDK is in 0.x. Minor releases may change the API until 1.0.
 
 ## Install
 
@@ -14,102 +15,113 @@ Node.js 22.12.0 or later, Bun, Deno, Cloudflare Workers, and browsers. Use ESM
 npm install @gatherdeal/sdk
 ```
 
-Deno also supports `import GatherDeal from "npm:@gatherdeal/sdk"`.
+In Deno, you can import directly from `npm:@gatherdeal/sdk`.
 
-## Call the API
+## Authentication
+
+Set `GATHERDEAL_API_KEY` on your server. With no explicit credential, the SDK
+reads it in Node.js, Bun, and Deno. Deno requires environment permission for
+that variable. Construction throws if no credential is configured or found.
 
 ```ts
 import GatherDeal from "@gatherdeal/sdk";
 
-const client = new GatherDeal({ apiKey });
-const outlet = await client.identity.outlets.get("outlet-id");
+const client = new GatherDeal();
+```
+
+You can also pass an organization key explicitly with `new GatherDeal({ apiKey })`.
+In Cloudflare Workers, pass the key from a secret binding. The examples below
+use the `client` created above unless they show a separate client.
+
+In browsers, use a per-user bearer token. `accessToken` accepts a string or a
+function that returns a token, including an async function. Browser visitors can
+read any API key you include in your app, so the SDK requires explicit
+`dangerouslyAllowBrowser: true` to use one.
+
+```ts
+import GatherDeal from "@gatherdeal/sdk";
+
+const browserClient = new GatherDeal({ accessToken: "user-access-token" });
+```
+
+Choose one credential option. Pass `apiKey: null` to skip environment lookup
+and call endpoints that allow anonymous access, such as outlet reads.
+
+```ts
+import GatherDeal from "@gatherdeal/sdk";
+
+const anonymousClient = new GatherDeal({ apiKey: null });
+const outlets = await anonymousClient.identity.outlets.list({ limit: 20 });
+```
+
+## Making calls
+
+Pass the ID of the item the method acts on first. Put parent IDs, query fields,
+and body fields in the params object. Call options go last.
+
+| Method targets | Signature | Example |
+| --- | --- | --- |
+| Item | `get(id, params?, options?)` | Look up an outlet by its ID. |
+| Nested collection | `list({ parent_id, ... }, options?)` | List messages for a chat. |
+| Nested item | `remove(id, { parent_id }, options?)` | Remove a recipient from a draft broadcast. |
+| Singleton sub-resource | `get({ parent_id }, options?)` | Get the pairing for an agent. |
+| Command on an item | `cancel(id, params?, options?)` | Cancel a broadcast by its ID. |
+
+```ts
+const outlet = await client.identity.outlets.get("outlet-id", { with_owner: true });
+```
+
+```ts
+const messages = await client.whatsapp.chats.messages.list({ chat_id: "chat-id" });
+```
+
+```ts
+await client.whatsapp.broadcasts.recipients.remove("recipient-id", {
+  broadcast_id: "draft-broadcast-id",
+});
+```
+
+Agent pairing requires a user credential with the appropriate permission.
+
+```ts
+import GatherDeal from "@gatherdeal/sdk";
+
+const userClient = new GatherDeal({ accessToken: "user-access-token" });
+const pairing = await userClient.whatsapp.agents.pairing.get({ agent_id: "agent-id" });
+```
+
+```ts
+const broadcast = await client.whatsapp.broadcasts.cancel("broadcast-id");
+```
+
+## Results
+
+Await a call to get its typed result. Resource, parameter, and operation-specific
+response types are available from `@gatherdeal/sdk/crm`, `@gatherdeal/sdk/identity`,
+and `@gatherdeal/sdk/whatsapp`.
+
+**Resource**
+
+```ts
+import type { Outlet } from "@gatherdeal/sdk/identity";
+
+const outlet: Outlet = await client.identity.outlets.get("outlet-id");
 console.log(outlet.id);
 ```
 
-In CommonJS, use `const { GatherDeal } = require("@gatherdeal/sdk")`.
-
-Pass the leaf path ID first, query and body params next, and call options last.
-For example, `get(id, { with_owner: true }, { maxRetries: 0 })` includes the
-outlet owner and makes one attempt. Import resource and param types from the
-service module, such as `@gatherdeal/sdk/identity`.
-
-Awaiting a call returns the resource, page or receipt described by the
-operation. Bodyless operations resolve to `undefined`. To read the HTTP
-response and request ID with the result, use `withResponse()`.
+**Page**
 
 ```ts
-const call = client.identity.outlets.list({ limit: 20 });
-const { data: page, response, requestID } = await call.withResponse();
-console.log(page.data.length, response.status, requestID);
+const page = await client.identity.outlets.list({ limit: 20 });
+console.log(page.data.length, page.hasNextPage());
 ```
 
-`asResponse()` returns the HTTP response alone. Both methods rebuild a
-response from the buffered text, original status and headers. Each view has
-its own readable body. Awaiting or iterating the same call reuses its
-execution.
-
-## Authentication
-
-Use `new GatherDeal({ apiKey })` with an organization key on your server. In
-browsers, use `new GatherDeal({ accessToken: () => getAccessToken() })` with a
-per-user access token. The SDK can call the provider again after a 401 if another
-attempt is available. Credentials go in the bearer header, and requests omit
-cookies. The SDK refuses browser API keys unless `dangerouslyAllowBrowser`
-is explicitly enabled. With no explicit credentials, the SDK looks for
-`GATHERDEAL_API_KEY` on Node.js and Bun. On Deno it reads the variable only
-with environment permission. Pass `apiKey: null` to make anonymous outlet reads.
-
-Supply a custom fetch implementation with `fetch`, and override the service
-URL with `serviceBaseURLs: { identity: "https://example.com/identity" }`. URLs
-must be absolute and free of credentials, queries and fragments. HTTPS is
-required except on loopback or when you set `allowInsecureHttp: true`.
-
-## Timeouts and retries
-
-Set `timeout` and `maxRetries` on a call to override the client defaults. The
-default is two retries with a 60-second timeout per attempt, including token
-acquisition and response reading. Pass a `signal` to bound the whole call,
-including waits between attempts.
+**Object receipts**
 
 ```ts
-await client.identity.outlets.list(
-  { limit: 20 },
-  { maxRetries: 0, signal: AbortSignal.timeout(10_000) },
-);
+const { id } = await client.crm.contacts.create({ kind: "personal", name: "Alex Tan" });
+console.log(id);
 ```
-
-GET requests and keyed writes can retry connection failures, timeouts,
-retryable problems and HTTP 429, 502, 503 or 504. If a token provider is
-configured, one 401 can trigger an immediate refresh within the same attempt
-budget. Other automatic retries of writes require an idempotency key. The SDK
-generates a key for a keyed write and reuses it on every attempt. Supply your
-own key when you need to persist it across calls.
-
-The longer of `Retry-After` and `retry_after_ms` takes precedence over
-exponential backoff with jitter. If the server requests more than 60 seconds,
-the SDK throws the error.
-
-## Errors
-
-`APIError` carries the status, response headers, request ID from
-`X-Correlation-Id`, operation and attempt. When the server returns a valid
-problem document, the error includes its code, details, violations and raw
-`problem`. Use `isAPIError(error, code?)` to narrow any HTTP error or the
-service or method's `isError(error, code?)` to narrow declared problem codes
-and their details.
-
-| Error | When it is thrown |
-| --- | --- |
-| `BadRequestError`, `AuthenticationError`, `PermissionDeniedError`, `NotFoundError`, `ConflictError` | HTTP 400, 401, 403, 404 and 409 respectively |
-| `PreconditionFailedError`, `UnprocessableEntityError`, `RateLimitError` | HTTP 412, 422 and 429 respectively |
-| `InternalServerError` | HTTP 5xx |
-| `APIError` | Other HTTP errors, including 426 and 428 |
-| `InvalidResponseError` | A malformed success response or a refused redirect |
-| `APIConnectionError`, `APIConnectionTimeoutError`, `APIUserAbortError` | A connection failure, an attempt timeout or cancellation by the caller |
-| `OutcomeUnknownError` | An unkeyed conditional write may have reached the server, but the SDK cannot determine its outcome |
-
-For conditional writes, pass the resource revision in the call options and
-reuse the returned revision on the next write.
 
 ```ts
 const deal = await client.crm.deals.get("deal-id");
@@ -118,21 +130,184 @@ const { revision } = await client.crm.deals.update(
   { remark: "Contacted the customer" },
   { ifMatch: deal.revision },
 );
+console.log(revision);
 ```
 
-On 412, read the resource again before applying the change. On
-`OutcomeUnknownError`, read
-the resource using the operation in `error.readOperation` and compare the
-fields you intended to change. If your values are in place, continue with the
-new revision. Otherwise reapply the change with the fresh revision. The
-server accepts wildcards and revision lists in `If-Match`. A single revision
-from the read gives the strongest protection.
+**Counts**
+
+```ts
+const { added, duplicates } = await client.whatsapp.broadcastSuppressions.add({
+  to: ["+12025550126"],
+});
+console.log(added, duplicates);
+```
+
+**Void**
+
+```ts
+const result: void = await client.crm.contactTags.add("tag-id", {
+  contact_id: "contact-id",
+});
+// result is undefined.
+```
+
+**WhatsApp message feed**
+
+`whatsapp.chatMessages.list()` returns message changes and an `after_rev`
+watermark. Start at 0 or load your saved watermark. Drain available batches
+while `has_more` is true, then save the watermark after processing the changes
+and pass it to the next poll.
+
+```ts
+async function readMessageChanges(afterRev = 0): Promise<number> {
+  for (;;) {
+    const batch = await client.whatsapp.chatMessages.list({ after_rev: afterRev, limit: 100 });
+    for (const message of batch.messages) {
+      console.log(message.id, message.rev, message.merged_into_id);
+    }
+    afterRev = batch.after_rev;
+    if (!batch.has_more) return afterRev;
+  }
+}
+
+const watermark = await readMessageChanges();
+```
+
+## Raw responses
+
+For a successful call, use `withResponse()` for the typed result, HTTP response,
+and request ID. Use `asResponse()` for the HTTP response alone.
+
+```ts
+const call = client.identity.outlets.get("outlet-id");
+const { data: outlet, response, requestID } = await call.withResponse();
+console.log(outlet.id, response.status, requestID);
+
+const raw = await call.asResponse();
+console.log(await raw.text());
+```
+
+Both helpers share the same request execution and rebuild a fresh `Response`
+from the buffered body text, status, and headers. The body has already been
+read from the network when either helper resolves.
+
+## Request IDs
+
+The SDK exposes the `X-Correlation-Id` response header as `requestID` on
+`withResponse()` results and HTTP errors. It is `undefined` when the header
+is unavailable. Include it when reporting a failed request.
+
+## Errors
+
+```text
+GatherDealError
+├── APIError (including the HTTP status subclasses below)
+├── APIConnectionError
+│   ├── APIConnectionTimeoutError
+│   └── OutcomeUnknownError
+├── APIUserAbortError
+└── InvalidResponseError
+```
+
+| Status or failure | Error |
+| --- | --- |
+| 400 | `BadRequestError` |
+| 401 | `AuthenticationError` |
+| 403 | `PermissionDeniedError` |
+| 404 | `NotFoundError` |
+| 409 | `ConflictError` |
+| 412 | `PreconditionFailedError` |
+| 422 | `UnprocessableEntityError` |
+| 429 | `RateLimitError` |
+| 5xx | `InternalServerError` |
+| Other HTTP failures | `APIError` |
+| Connection failure | `APIConnectionError` |
+| Attempt timed out | `APIConnectionTimeoutError` |
+| Conditional write may have been applied | `OutcomeUnknownError` |
+| Caller cancelled | `APIUserAbortError` |
+| Invalid success response or refused redirect | `InvalidResponseError` |
+
+`APIError` includes `status`, `headers`, and `requestID`. With a valid API
+problem it also exposes `code`, `details`, `violations`, and the original `problem`.
+Use `isAPIError(error, code)` to match a problem code or omit the code to
+match any HTTP error. Method and service `isError()` guards can narrow
+`details` for a declared code.
+
+```ts
+import { isAPIError } from "@gatherdeal/sdk";
+
+try {
+  await client.identity.outlets.list({ limit: 20 });
+} catch (error) {
+  if (client.identity.outlets.list.isError(error, "PAGINATION_PARAMS_INVALID")) {
+    console.error(error.details.reason);
+  } else if (isAPIError(error, "PAGINATION_CURSOR_INVALID")) {
+    console.error(error.code, error.requestID);
+  }
+  throw error;
+}
+```
+
+## Retries and timeouts
+
+The default is two retries after the first attempt. Each attempt has a
+60-second timeout covering token acquisition, fetch, and reading the response.
+Use an abort signal for an overall deadline that includes retry delays.
+
+GETs and keyed writes can retry connection failures, attempt timeouts,
+retryable API problems, and HTTP 429, 502, 503, or 504. Unkeyed writes are
+never resent after a possible write. A definite 401 refusal can trigger one
+token refresh and resend if you supplied an `accessToken` function and have
+an attempt left.
+
+The SDK uses the longer of `Retry-After` and `retry_after_ms` when both are
+present. Without a server hint it uses exponential backoff with jitter.
+If the server asks for more than 60 seconds, the SDK throws the error
+immediately.
+
+```ts
+await client.identity.outlets.list(
+  { limit: 20 },
+  { timeout: 5_000, maxRetries: 1, signal: AbortSignal.timeout(10_000) },
+);
+```
+
+## Idempotency keys
+
+For writes that accept an `idempotencyKey`, the SDK generates one if you
+omit it and reuses it across automatic retries. To retry the same logical
+write across separate calls, save your own key and reuse it with the same
+parameters. Use a new key for a different write. Keys must be 1–128 visible
+ASCII characters without spaces.
+
+```ts
+const idempotencyKey = crypto.randomUUID();
+const { id } = await client.crm.contacts.create(
+  { kind: "personal", name: "Alex Tan" },
+  { idempotencyKey },
+);
+```
+
+## Conditional writes
+
+Pass the revision from the read as the required `ifMatch` option, as shown
+in the deal update above. The SDK sends it in `If-Match`. Reuse the returned
+`revision` for the next update. If you get a 412 (`PreconditionFailedError`),
+read the resource again and reapply your change with the fresh revision.
+
+If you get `OutcomeUnknownError`, the write may already have been applied.
+Read the resource using the method named by `error.readOperation` and
+compare the fields you intended to set. A changed revision alone cannot
+tell you who wrote it. If your values are present, continue with the fresh
+revision. Otherwise, reapply the change using that revision. Resending the
+old revision can yield a 412 caused by your own earlier write. The server
+accepts `*` and comma-separated revision lists, which relax the protection
+of checking one exact revision.
 
 ## Pagination
 
-Await a list call for its first page. A page provides `data`,
-`hasNextPage()`, `getNextPage()` and `iterPages()`. Iterate over a list
-call directly to visit its items across all pages.
+Use `for await` to visit each item across pages. Await the list call itself
+for the first page. Use `iterPages()` to iterate page by page.
 
 ```ts
 for await (const outlet of client.identity.outlets.list({ limit: 20 })) {
@@ -140,21 +315,59 @@ for await (const outlet of client.identity.outlets.list({ limit: 20 })) {
 }
 ```
 
-To resume, pass the original params and `after: page.next_cursor`, omitting
-`before` or `page`. In numbered mode the SDK can continue using the
-current page number when the server omits a cursor. Invalid or repeated
-continuation cursors raise `InvalidResponseError`.
-
-### WhatsApp message feed
-
-Use `client.whatsapp.chatMessages.list()` to poll for new and changed
-messages. Pass the returned `after_rev` into the next call. When `has_more`
-is true, more changes are ready. To paginate messages within one chat, use
-`client.whatsapp.chats.messages.list({ chat_id })`.
+Use `hasNextPage()` before `getNextPage()`. To resume later, save
+`page.next_cursor` and pass it as `after` with the original filters, sort,
+and limit. Omit any `page` or `before` selector when resuming by cursor.
 
 ```ts
-const batch = await client.whatsapp.chatMessages.list({ after_rev: 0, limit: 20 });
-const next = await client.whatsapp.chatMessages.list({ after_rev: batch.after_rev, limit: 20 });
+const params = { limit: 20 };
+let page = await client.identity.outlets.list(params);
+console.log(page.data.length);
+if (page.hasNextPage()) {
+  page = await page.getNextPage();
+  console.log(page.data.length);
+}
+
+// Resume using the cursor from the last processed page.
+if (page.next_cursor !== undefined) {
+  const resumed = await client.identity.outlets.list({ ...params, after: page.next_cursor });
+  console.log(resumed.data.length);
+}
+```
+
+## Using from CommonJS
+
+```js
+const { GatherDeal } = require("@gatherdeal/sdk");
+
+const client = new GatherDeal();
+client.identity.outlets.get("outlet-id").then((outlet) => console.log(outlet.id));
+```
+
+## Per-call options and `withOptions`
+
+| Call option | Use |
+| --- | --- |
+| `timeout` | Override the per-attempt timeout in milliseconds. |
+| `maxRetries` | Override the retry count. Use `0` for a single attempt. |
+| `signal` | Cancel the call with an `AbortSignal`. |
+| `headers` | Override default headers case-insensitively. Use `null` to remove an inherited header. |
+| `idempotencyKey` | Set the key for a write that accepts one. |
+| `ifMatch` | Supply the required revision for a conditional write. |
+
+Pass `undefined` in the params slot when you only need call options.
+Use `withOptions()` to create a client with inherited settings and selected
+overrides. You can also set `defaultHeaders`, a custom `fetch`, or a
+`baseURL` on the client. Use the dedicated authentication and write options
+for SDK-managed headers such as `Authorization`, `Idempotency-Key`, and `If-Match`.
+
+```ts
+const quickClient = client.withOptions({ timeout: 5_000, maxRetries: 0 });
+const outlet = await quickClient.identity.outlets.get(
+  "outlet-id",
+  undefined,
+  { signal: AbortSignal.timeout(10_000) },
+);
 ```
 
 ## License
