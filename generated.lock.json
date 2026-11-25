@@ -1,7 +1,28 @@
 {
   "format_version": 1,
-  "set": "sha256:b9f274bb8da6a7ad545cdc3dbd4363f30357f2b4a2053e6bd77308d1bd8c734f",
+  "set": "sha256:e0c43e0da2d2df4203f94934ae39944cab47352f849255870c59088a1f973c33",
   "services": [
+    {
+      "service": "crm",
+      "version": "v1",
+      "contract_sha256": "a58cd29ebc1238773134db65506582862adf7a61dd32b08ecc352d4418d05d89",
+      "public_ids": [
+        "crm.contact_logs.create",
+        "crm.contact_logs.list",
+        "crm.contact_tags.add",
+        "crm.contact_tags.list",
+        "crm.contact_tags.remove",
+        "crm.contacts.create",
+        "crm.contacts.get",
+        "crm.contacts.list",
+        "crm.contacts.update",
+        "crm.deals.create",
+        "crm.deals.get",
+        "crm.deals.list",
+        "crm.deals.update",
+        "crm.sales_pipelines.list"
+      ]
+    },
     {
       "service": "identity",
       "version": "v1",
@@ -10,9 +31,70 @@
         "identity.outlets.get",
         "identity.outlets.list"
       ]
+    },
+    {
+      "service": "whatsapp",
+      "version": "v1",
+      "contract_sha256": "9439c05e657753cd0ef7606641e33406ec278ab2ce4dc33eeaad46d05938b77b",
+      "public_ids": [
+        "whatsapp.agents.create",
+        "whatsapp.agents.delete",
+        "whatsapp.agents.get",
+        "whatsapp.agents.list",
+        "whatsapp.agents.pairing.get",
+        "whatsapp.agents.update",
+        "whatsapp.broadcast_suppressions.add",
+        "whatsapp.broadcast_suppressions.list",
+        "whatsapp.broadcast_suppressions.remove",
+        "whatsapp.broadcasts.cancel",
+        "whatsapp.broadcasts.create",
+        "whatsapp.broadcasts.get",
+        "whatsapp.broadcasts.list",
+        "whatsapp.broadcasts.pause",
+        "whatsapp.broadcasts.recipients.add",
+        "whatsapp.broadcasts.recipients.list",
+        "whatsapp.broadcasts.recipients.remove",
+        "whatsapp.broadcasts.resume",
+        "whatsapp.broadcasts.start",
+        "whatsapp.broadcasts.update",
+        "whatsapp.chat_messages.get",
+        "whatsapp.chat_messages.list",
+        "whatsapp.chats.get",
+        "whatsapp.chats.list",
+        "whatsapp.chats.messages.list",
+        "whatsapp.message_templates.create",
+        "whatsapp.message_templates.delete",
+        "whatsapp.message_templates.get",
+        "whatsapp.message_templates.list",
+        "whatsapp.message_templates.preview",
+        "whatsapp.message_templates.replace",
+        "whatsapp.messages.create",
+        "whatsapp.messages.get",
+        "whatsapp.messages.list"
+      ]
     }
   ],
   "files": [
+    {
+      "path": "crm/v1/errors.ts",
+      "sha256": "96c68b7bdfd22bb664797ff18c1874e7f8f6208284e4be7ed0bb1f74c4e0e9e2",
+      "size": 6178
+    },
+    {
+      "path": "crm/v1/index.ts",
+      "sha256": "ee3ecb9a13de2302ac03de7172c2bfe2c04ab8ad2e1fceff194acfbdae028ac6",
+      "size": 4017
+    },
+    {
+      "path": "crm/v1/operations.ts",
+      "sha256": "42fe7a78f93c8f9ac4485304f1ab6d02c260223350252c1aecaad5b3d150f680",
+      "size": 39167
+    },
+    {
+      "path": "crm/v1/types.ts",
+      "sha256": "9fa87281210ed3cb2666286255c5d9f93a59a2d728b7232c02ee940a62314c0e",
+      "size": 17925
+    },
     {
       "path": "identity/v1/errors.ts",
       "sha256": "5c83dc5e042edaa26709bc9fdb419fbe0f6e0761be9a108cad089edb08e6bd6f",
@@ -37,6 +119,26 @@
       "path": "operation.ts",
       "sha256": "363ed9f21b9caefbc350838d9b7e02a9990a4fd75ff757bedec03cb20292cdb0",
       "size": 6783
+    },
+    {
+      "path": "whatsapp/v1/errors.ts",
+      "sha256": "d2904c7c5400c042c785b03595d120dfa6bed0d174144fe71043d18951dd879b",
+      "size": 8270
+    },
+    {
+      "path": "whatsapp/v1/index.ts",
+      "sha256": "277936be403fa2de52fec68cbe885ffb8f844a0eb0193b1cd0342d018bde4a8c",
+      "size": 7795
+    },
+    {
+      "path": "whatsapp/v1/operations.ts",
+      "sha256": "3adc2c32610524ac6a7f504f702998ea1f115e89ec0fa76fe7b645e1d30e70dd",
+      "size": 69289
+    },
+    {
+      "path": "whatsapp/v1/types.ts",
+      "sha256": "d3b7630b1c089e14b4f7ef9efef04a60fbf554f862a972d083367465b4138ae3",
+      "size": 66800
     }
   ]
 }
