@@ -28,7 +28,7 @@ import { createClient } from "@gatherdeal/sdk";
 
 const client = createClient({ apiKey: process.env.GATHERDEAL_API_KEY });
 
-const { contacts } = await client.crm.contacts.list({ q: "tan", count: 20 });
+const { contacts } = await client.crm.contacts.list({ q: "tan", limit: 20 });
 for (const contact of contacts.data) console.log(contact.id);
 ```
 
@@ -43,7 +43,7 @@ import { createClient } from "@gatherdeal/sdk";
 export default {
   async fetch(request: Request, env: { GATHERDEAL_API_KEY: string }) {
     const client = createClient({ apiKey: env.GATHERDEAL_API_KEY });
-    const { contacts } = await client.crm.contacts.list({ count: 10 });
+    const { contacts } = await client.crm.contacts.list({ limit: 10 });
     return Response.json(contacts.data);
   },
 };
@@ -63,7 +63,12 @@ const { deal } = await client.crm.deals.get({ id: dealId });
 ## Calling the API
 
 Every operation is a method under its service, named after its public id:
-`crm.contact_tags.assign` is `client.crm.contactTags.assign(...)`.
+`crm.contact_tags.assign` is `client.crm.contactTags.assign(...)` and
+`whatsapp.agents.pairing.get` is `client.whatsapp.agents.pairing.get(...)`.
+
+Deprecated operations stay callable until they are removed and are marked
+`@deprecated` in the types, so editors and linters flag them; their
+documentation names the replacement.
 
 Each method takes one flat input object holding the path, query, header and
 body members under their API names, and an optional second argument with
@@ -86,7 +91,8 @@ await client.crm.contactTags.assign(
 | `idempotencyKey` | Idempotency-Key of a keyed write (see below).                |
 
 The result is the response body as the API defines it, with API field names
-(`snake_case`). Operations that answer without a body resolve to `undefined`.
+(`snake_case`). Any 2xx status is a success. Operations that answer without a
+body (`204 No Content`) resolve to `undefined`.
 
 Types of inputs, outputs and resources are exported per service:
 
@@ -243,13 +249,14 @@ act in every outlet the credential may use, or pass one to act in that
 outlet:
 
 ```ts
-await client.crm.contacts.list({ outlet_id: outletId, count: 50 });
+await client.crm.contacts.list({ outlet_id: outletId, limit: 50 });
 ```
 
 ## Conditional writes
 
-Deal updates are conditional. Read the deal, pass its `revision` as
-`if_match`, and use the `revision` of the answer for the next write:
+Updates of deals and WhatsApp agents are conditional. Read the resource, pass
+its `revision` unchanged as `if_match` (it is a quoted entity tag, sent as the
+`If-Match` header), and use the `revision` of the answer for the next write:
 
 ```ts
 const { deal } = await client.crm.deals.get({ id });
@@ -257,6 +264,7 @@ try {
   const { revision } = await client.crm.deals.update({
     id,
     if_match: deal.revision,
+    stage_id: nextStageId,
     remark: "Called back",
   });
 } catch (error) {
@@ -267,15 +275,28 @@ try {
 }
 ```
 
+`if_match` is a required member, so a missing revision is a type error and a
+`TypeError` before any request. A stale revision fails with
+`PRECONDITION_FAILED` (412); a request without one fails with
+`PRECONDITION_REQUIRED` (428).
+
 ## Pagination
 
-List operations take the page parameters as the API defines them (`count`,
-`after`, `before`, `p`, `total`) and return one page:
+List operations take the page parameters as the API defines them and return
+one page:
+
+| Member            | Meaning                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| `limit`           | Items per page.                                                  |
+| `after`, `before` | Cursors from a previous page's `next_cursor` or `prev_cursor`.   |
+| `page`            | A 1-based page number, instead of a cursor.                      |
+| `total`           | `"exact"` to count the matching items, `"none"` to skip it.      |
+| `sort`            | Comma-separated fields, ascending unless prefixed with `-`, e.g. `"-create_at,name"`. |
 
 ```ts
-const { contacts } = await client.crm.contacts.list({ count: 100 });
+const { contacts } = await client.crm.contacts.list({ limit: 100, sort: "name" });
 if (contacts.next_cursor !== undefined) {
-  await client.crm.contacts.list({ count: 100, after: contacts.next_cursor });
+  await client.crm.contacts.list({ limit: 100, sort: "name", after: contacts.next_cursor });
 }
 ```
 
@@ -286,7 +307,7 @@ cursor, throws `ProtocolError` before any of its items is yielded:
 ```ts
 import { paginate } from "@gatherdeal/sdk";
 
-for await (const contact of paginate(client.crm.contacts.list, { count: 100 })) {
+for await (const contact of paginate(client.crm.contacts.list, { limit: 100 })) {
   console.log(contact.id);
 }
 ```
