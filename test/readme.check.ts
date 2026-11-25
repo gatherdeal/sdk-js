@@ -1,28 +1,46 @@
-// Compile the README examples against the SDK.
-import { GatherDeal, isAPIError } from "../src/index.js";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+import ts from "typescript-5-0";
 
-export async function examples(apiKey: string): Promise<void> {
-  const client = new GatherDeal({ apiKey });
-  const deal = await client.crm.deals.get("deal-id");
-  const { revision } = await client.crm.deals.update(
-    deal.id,
-    { remark: "Contacted the customer" },
-    { ifMatch: deal.revision },
-  );
-  const batch = await client.whatsapp.chatMessages.list({ after_rev: 0, limit: 20 });
-  const next = await client.whatsapp.chatMessages.list({ after_rev: batch.after_rev, limit: 20 });
-  void [revision, next];
-
-  const outlet = await client.identity.outlets.get("outlet-id");
-  const call = client.identity.outlets.list({ limit: 20 });
-  const { data: page, response, requestID } = await call.withResponse();
-  console.log(outlet.id, page.data.length, response.status, requestID);
-  for await (const item of client.identity.outlets.list({ limit: 20 })) console.log(item.id);
-  try {
-    await client.identity.outlets.list({ limit: 20 }, { maxRetries: 0, signal: AbortSignal.timeout(10_000) });
-  } catch (error) {
-    if (client.identity.outlets.list.isError(error, "PAGINATION_PARAMS_INVALID")) console.log(error.details.reason);
-    else if (isAPIError(error)) console.log(error.status, error.requestID);
-    throw error;
+test("README TypeScript examples compile with TypeScript 5.0", () => {
+  const root = process.cwd();
+  const readme = readFileSync(join(root, "README.md"), "utf8");
+  const examples = new Map<string, string>();
+  for (const match of readme.matchAll(/^```(?:ts|typescript)[ \t]*\r?\n([\s\S]*?)^```[ \t]*\r?$/gm)) {
+    const line = readme.slice(0, match.index).split("\n").length + 1;
+    examples.set(join(root, `readme-line-${line}.mts`), match[1]!);
   }
-}
+  assert.ok(examples.size > 0, "README has no TypeScript examples");
+  // Snippets following setup may refer to the client from that example.
+  examples.set(
+    join(root, "readme-setup.d.ts"),
+    'declare const client: import("@gatherdeal/sdk").GatherDeal;',
+  );
+
+  const options: ts.CompilerOptions = {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.NodeNext,
+    strict: true,
+    exactOptionalPropertyTypes: true,
+    noEmit: true,
+    types: [],
+    baseUrl: root,
+    paths: {
+      "@gatherdeal/sdk": ["src/index.ts"],
+      "@gatherdeal/sdk/*": ["src/*.ts"],
+    },
+  };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile;
+  host.getSourceFile = (name, ...args) => {
+    const example = examples.get(name);
+    return example === undefined
+      ? getSourceFile(name, ...args)
+      : ts.createSourceFile(name, example, args[0]);
+  };
+  const program = ts.createProgram([...examples.keys()], options, host);
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  assert.ok(diagnostics.length === 0, ts.formatDiagnosticsWithColorAndContext(diagnostics, host));
+});

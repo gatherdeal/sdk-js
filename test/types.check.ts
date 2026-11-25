@@ -29,11 +29,25 @@ export async function checks(error: unknown): Promise<void> {
   }
 
   const id: string = (await crm.contacts.create({ kind: "personal", name: "Test" }, { idempotencyKey: "key" })).id;
-  await whatsapp.broadcasts.recipients.remove(id, { broadcast_id: "b1" });
   await crm.deals.update("d1", { remark: "Updated" }, { ifMatch: '"r1"' });
   // @ts-expect-error If-Match is required
   void crm.deals.update("d1", { remark: "Updated" });
   const feed: ChatMessageFeedListResponse = await whatsapp.chatMessages.list({ after_rev: 1 });
-  const messages = await whatsapp.chats.messages.list({ chat_id: "c1" });
-  void [outlet, page, feed.after_rev, messages.data];
+  void [id, outlet, page, feed.after_rev];
+
+  await whatsapp.chats.messages.list({ chat_id: "c1" });
+  // @ts-expect-error a nested collection takes the parent ID in params
+  void whatsapp.chats.messages.list("c1");
+
+  await whatsapp.broadcasts.recipients.remove("r1", { broadcast_id: "b1" });
+  // @ts-expect-error a nested item takes its own ID separately from the parent ID
+  void whatsapp.broadcasts.recipients.remove({ recipient_id: "r1", broadcast_id: "b1" });
+
+  await whatsapp.agents.pairing.get({ agent_id: "a1" });
+  // @ts-expect-error a singleton sub-resource takes the parent ID in params
+  void whatsapp.agents.pairing.get("a1");
+
+  await whatsapp.broadcasts.cancel("b1");
+  // @ts-expect-error a command on an item takes its ID positionally
+  void whatsapp.broadcasts.cancel({ broadcast_id: "b1" });
 }
