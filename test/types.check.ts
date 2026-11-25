@@ -11,7 +11,7 @@ export async function checks(): Promise<void> {
 
   const list = await client.crm.contacts.list();
   expectType<Equal<typeof list, ContactsListOutput>>(true);
-  await client.crm.contacts.list({ q: "tan", count: 20 }, { signal: AbortSignal.timeout(1000), retries: 0 });
+  await client.crm.contacts.list({ q: "tan", limit: 20 }, { signal: AbortSignal.timeout(1000), retries: 0 });
 
   // @ts-expect-error id is required
   await client.crm.deals.get();
@@ -28,6 +28,18 @@ export async function checks(): Promise<void> {
   await client.whatsapp.broadcasts.recipients.list({ broadcast_id: "b" } as never);
   const message: Partial<MessagesCreateInput> = {};
   void message;
+
+  await client.crm.contacts.list({ page: 2, limit: 50, sort: "-create_at,name" });
+  // @ts-expect-error page size is limit
+  await client.crm.contacts.list({ count: 20 });
+  await client.whatsapp.agents.pairing.get({ agent_id: "a" } as never);
+  await client.whatsapp.chats.messages.list({ chat_id: "c" } as never);
+  await client.whatsapp.messageTemplates.replace({ template_id: "t" } as never);
+  await client.identity.outlets.get({ id: "o" });
+  // @ts-expect-error the template update operation is replace
+  void client.whatsapp.messageTemplates.update;
+  // @ts-expect-error If-Match is required
+  await client.whatsapp.agents.update({ agent_id: "a" });
 
   const error: unknown = new Error();
   if (client.crm.contacts.list.isError(error, "CRM_CONTACT_EXPANSION_LIMIT")) {
@@ -48,7 +60,7 @@ export async function checks(): Promise<void> {
     void e;
   }
 
-  for await (const contact of paginate(client.crm.contacts.list, { count: 50 })) {
+  for await (const contact of paginate(client.crm.contacts.list, { limit: 50 })) {
     const id: string = contact.id;
     void id;
   }

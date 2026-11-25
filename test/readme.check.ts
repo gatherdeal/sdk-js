@@ -9,16 +9,17 @@ declare function getAccessToken(): Promise<string>;
 declare const dealId: string;
 declare const id: string;
 declare const outletId: string;
+declare const nextStageId: string;
 declare const input: MessagesCreateInput;
 
 export async function examples(): Promise<void> {
   const client = createClient({ apiKey });
-  const { contacts } = await client.crm.contacts.list({ q: "tan", count: 20 });
+  const { contacts } = await client.crm.contacts.list({ q: "tan", limit: 20 });
   for (const contact of contacts.data) console.log(contact.id);
 
-  const worker = await client.crm.contacts.list({ count: 10 });
+  const worker = await client.crm.contacts.list({ limit: 10 });
   void worker.contacts.data;
-  const { outlets } = await createClient().identity.outlets.list({ count: 10 });
+  const { outlets } = await createClient().identity.outlets.list({ limit: 10 });
   const first: Outlet | null | undefined = outlets.data[0];
   void first;
   createClient({ apiKey, baseUrl: { crm: "http://localhost:5005" }, allowLoopbackHttp: true, timeoutMs: 60_000 });
@@ -46,10 +47,10 @@ export async function examples(): Promise<void> {
   const key = crypto.randomUUID();
   await client.whatsapp.messages.create(input, { idempotencyKey: key });
 
-  await client.crm.contacts.list({ outlet_id: outletId, count: 50 });
+  await client.crm.contacts.list({ outlet_id: outletId, limit: 50 });
 
   const read = await client.crm.deals.get({ id });
-  const update: DealsUpdateInput = { id, if_match: read.deal.revision, remark: "Called back" };
+  const update: DealsUpdateInput = { id, if_match: read.deal.revision, stage_id: nextStageId, remark: "Called back" };
   try {
     const { revision } = await client.crm.deals.update(update);
     void revision;
@@ -60,9 +61,9 @@ export async function examples(): Promise<void> {
     throw error;
   }
 
-  const page = await client.crm.contacts.list({ count: 100 });
+  const page = await client.crm.contacts.list({ limit: 100, sort: "name" });
   if (page.contacts.next_cursor !== undefined) {
-    await client.crm.contacts.list({ count: 100, after: page.contacts.next_cursor });
+    await client.crm.contacts.list({ limit: 100, sort: "name", after: page.contacts.next_cursor });
   }
-  for await (const contact of paginate(client.crm.contacts.list, { count: 100 })) console.log(contact.id);
+  for await (const contact of paginate(client.crm.contacts.list, { limit: 100 })) console.log(contact.id);
 }

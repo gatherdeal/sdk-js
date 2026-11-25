@@ -9,7 +9,7 @@ export type PageItem<O> = {
 
 /**
  * Iterates every item of a paginated list operation, following next_cursor
- * from page to page. The page size comes from the input (e.g. count); page
+ * from page to page. The page size comes from the input (limit); page
  * and before members are ignored. A page without its item list, or one that
  * announces a next page without a new cursor, throws ProtocolError before
  * any of its items is yielded.

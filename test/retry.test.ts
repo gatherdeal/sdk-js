@@ -7,13 +7,15 @@ import {
   TimeoutError,
   createClient,
   type ClientOptions,
+  type Operation,
 } from "../src/index.js";
+import { invoke, type Credential } from "../src/transport.js";
 import { fakeFetch, json, problem, rejection, type Reply } from "./helpers.js";
 
 const listOk = () =>
   json(200, { status: "success", contacts: { data: [], has_next_page: false, has_prev_page: false, page_size: 20 } });
 const createOk = () => json(200, { status: "success", id: "c1" });
-const templateOk = () => json(200, { status: "success" });
+const writeOk = () => json(200, { status: "success" });
 const unavailable = (retryAfterMs = 0) => problem(503, "UNAVAILABLE", { retryable: true, retry_after_ms: retryAfterMs });
 const unauthorized = () => problem(401, "UNAUTHORIZED");
 const networkError = () => new TypeError("fetch failed");
@@ -38,7 +40,29 @@ function tokens() {
 }
 
 const createInput = { name: "Tan" } as never;
-const templateInput = { name: "hello" } as never;
+/** A write without replay protection; the published operations have none, the runtime still supports it. */
+const unprotectedWrite: Operation<unknown, unknown, string> = {
+  id: "x.items.create",
+  method: "POST",
+  path: "/v1/items",
+  parameters: [],
+  success: { status: 200, body: "json", required: [] },
+  body: "required",
+  idempotency: "none",
+  authentication: "required",
+  organizationKeys: true,
+  errors: [],
+};
+
+function callUnprotected(f: ReturnType<typeof fakeFetch>, credential: Credential) {
+  return invoke(
+    { fetch: f.fetch, credential, retries: 2, timeoutMs: 60_000 },
+    unprotectedWrite,
+    {},
+    "https://example.test/x",
+    { name: "hello" },
+  );
+}
 
 describe("retries", () => {
   it("retries a safe operation after a retryable problem, honouring retry_after_ms", async () => {
@@ -62,8 +86,8 @@ describe("retries", () => {
   });
 
   it("never retries an operation without replay protection", async () => {
-    const { f, client } = setup([networkError()]);
-    const error = await rejection(client.whatsapp.messageTemplates.create(templateInput));
+    const f = fakeFetch(networkError());
+    const error = await rejection(callUnprotected(f, { kind: "apiKey", apiKey: "k" }));
     assert.ok(error instanceof ConnectionError);
     assert.equal(f.calls.length, 1);
   });
@@ -213,8 +237,8 @@ describe("token refresh", () => {
 
   it("replays a write without replay protection when the 401 answered the first attempt", async () => {
     const t = tokens();
-    const { f, client } = setup([unauthorized(), templateOk()], { token: t.token });
-    await client.whatsapp.messageTemplates.create(templateInput);
+    const f = fakeFetch(unauthorized(), writeOk());
+    await callUnprotected(f, { kind: "token", token: t.token });
     assert.equal(f.calls.length, 2);
   });
 

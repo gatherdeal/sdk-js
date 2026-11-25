@@ -145,12 +145,12 @@ describe("pagination", () => {
     const f = fakeFetch(page(["a", "b"], "n1"), page(["c"]));
     const c = createClient({ apiKey: "k", fetch: f.fetch });
     const ids: string[] = [];
-    for await (const contact of paginate(c.crm.contacts.list, { count: 2, p: 3 })) ids.push(contact.id);
+    for await (const contact of paginate(c.crm.contacts.list, { limit: 2, page: 3 })) ids.push(contact.id);
     assert.deepEqual(ids, ["a", "b", "c"]);
     const second = new URL(f.calls[1]!.url).searchParams;
     assert.equal(second.get("after"), "n1");
-    assert.equal(second.get("count"), "2");
-    assert.equal(second.has("p"), false);
+    assert.equal(second.get("limit"), "2");
+    assert.equal(second.has("page"), false);
   });
 
   it("stops on a repeated cursor", async () => {

@@ -20,7 +20,7 @@ export async function consumer(token: () => Promise<string>): Promise<string[]> 
     }
     if (isApiError(error)) throw error;
   }
-  const input: OutletsListInput = { count: 10 };
+  const input: OutletsListInput = { limit: 10 };
   const names: string[] = [];
   for await (const outlet of paginate(client.identity.outlets.list, input)) if (outlet !== null) names.push(outlet.id);
   const message: Partial<MessagesCreateInput> = {};

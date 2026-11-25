@@ -75,7 +75,7 @@ describe("error fields and guards", () => {
   it("reads violations, details and the correlation header", async () => {
     const violations = [
       { pointer: "#/name", rule: "required", detail: "name is required" },
-      { parameter: { in: "query", name: "count" }, rule: "max", detail: "too large", params: { max: 100 } },
+      { parameter: { in: "query", name: "limit" }, rule: "max", detail: "too large", params: { max: 100 } },
     ];
     const error = await rejection(
       client(problem(422, "VALIDATION_FAILED", { errors: violations }, { "X-Correlation-Id": "c-9" })).crm.contacts.list(),

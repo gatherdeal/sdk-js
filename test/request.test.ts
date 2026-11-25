@@ -21,11 +21,11 @@ const ok = { status: "success", contacts: { data: [], has_next_page: false, has_
 describe("request serialization", () => {
   it("keeps the service prefix and writes scalar query values", async () => {
     const f = fakeFetch(json(200, ok));
-    await client(f.fetch).crm.contacts.list({ q: "tan", count: 20, outlet_id: "o1" });
+    await client(f.fetch).crm.contacts.list({ q: "tan", limit: 20, outlet_id: "o1" });
     const url = new URL(f.calls[0]!.url);
     assert.equal(url.origin + url.pathname, "https://api.gatherdeal.ai/crm/v1/contacts");
     assert.equal(url.searchParams.get("q"), "tan");
-    assert.equal(url.searchParams.get("count"), "20");
+    assert.equal(url.searchParams.get("limit"), "20");
     assert.equal(url.searchParams.get("outlet_id"), "o1");
     assert.equal(f.calls[0]!.init.method, "GET");
     assert.equal(f.calls[0]!.body, undefined);
@@ -67,22 +67,60 @@ describe("request serialization", () => {
 
   it("writes booleans and numbers as JSON text and omits null parameters", async () => {
     const f = fakeFetch(json(200, { status: "success", outlets: { data: [], has_next_page: false, has_prev_page: false, page_size: 20 } }));
-    await createClient({ fetch: f.fetch }).identity.outlets.list({ with_owner: true, count: 5, filter: null });
+    await createClient({ fetch: f.fetch }).identity.outlets.list({ with_owner: true, limit: 5, filter: null });
     const url = new URL(f.calls[0]!.url);
     assert.equal(url.searchParams.get("with_owner"), "true");
-    assert.equal(url.searchParams.get("count"), "5");
+    assert.equal(url.searchParams.get("limit"), "5");
     assert.equal(url.searchParams.has("filter"), false);
   });
 
   it("escapes path parameters and sends If-Match and the JSON body", async () => {
     const f = fakeFetch(json(200, { status: "success", revision: "r2" }));
-    await client(f.fetch).crm.deals.update({ id: "a/b c", if_match: "r1", remark: "hi", outlet_id: "o1" });
+    await client(f.fetch).crm.deals.update({ id: "a/b c", if_match: '"r1"', remark: "hi", outlet_id: "o1" });
     const call = f.calls[0]!;
-    assert.equal(call.url, "https://api.gatherdeal.ai/crm/v1/deals/a%2Fb%20c/fields?outlet_id=o1");
+    assert.equal(call.url, "https://api.gatherdeal.ai/crm/v1/deals/a%2Fb%20c?outlet_id=o1");
     assert.equal(call.init.method, "PATCH");
-    assert.equal(call.headers.get("If-Match"), "r1");
+    assert.equal(call.headers.get("If-Match"), '"r1"');
     assert.equal(call.headers.get("Content-Type"), "application/json");
     assert.deepEqual(JSON.parse(call.body!), { remark: "hi" });
+  });
+
+  it("sends page, limit and sort as query parameters", async () => {
+    const f = fakeFetch(json(200, ok));
+    await client(f.fetch).crm.contacts.list({ page: 2, limit: 50, sort: "-create_at,name" });
+    const url = new URL(f.calls[0]!.url);
+    assert.equal(url.searchParams.get("page"), "2");
+    assert.equal(url.searchParams.get("limit"), "50");
+    assert.equal(url.searchParams.get("sort"), "-create_at,name");
+  });
+
+  it("sends If-Match on agent updates", async () => {
+    const f = fakeFetch(json(200, { status: "success", agent: { id: "a1", revision: '"r2"' } }));
+    await client(f.fetch).whatsapp.agents.update({ agent_id: "a1", if_match: '"r1"', name: "Front desk" } as never);
+    const call = f.calls[0]!;
+    assert.equal(call.url, "https://api.gatherdeal.ai/whatsapp/v1/agents/a1");
+    assert.equal(call.init.method, "PATCH");
+    assert.equal(call.headers.get("If-Match"), '"r1"');
+  });
+
+  it("routes nested operations to their paths", async () => {
+    const cases: [(c: ReturnType<typeof client>) => Promise<unknown>, string, string][] = [
+      [(c) => c.whatsapp.agents.pairing.get({ agent_id: "a1" } as never), "GET", "/whatsapp/v1/agents/a1/pairing"],
+      [(c) => c.whatsapp.chats.messages.list({ chat_id: "c1" } as never), "GET", "/whatsapp/v1/chats/c1/messages"],
+      [(c) => c.whatsapp.messageTemplates.replace({ template_id: "t1" } as never), "PUT", "/whatsapp/v1/message-templates/t1"],
+      [(c) => c.identity.outlets.get({ id: "o1" }), "GET", "/identity/v1/outlets/o1"],
+    ];
+    for (const [call, method, path] of cases) {
+      const f = fakeFetch(new Response(null, { status: 500 }));
+      await call(client(f.fetch)).catch(() => undefined);
+      assert.equal(f.calls[0]!.init.method, method);
+      assert.equal(new URL(f.calls[0]!.url).pathname, path);
+    }
+  });
+
+  it("resolves a 204 write to undefined", async () => {
+    const f = fakeFetch(new Response(null, { status: 204 }));
+    assert.equal(await client(f.fetch).crm.contactTags.assign({ contact_id: "c1", tag_id: "t1" }), undefined);
   });
 
   it("rejects a missing required parameter before any request", async () => {

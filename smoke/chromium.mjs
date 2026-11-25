@@ -41,10 +41,10 @@ const api = await listen("localhost", (req, res) => {
   const send = (status, body, headers = {}) =>
     res.writeHead(status, { "Content-Type": "application/json", ...corsHeaders, ...headers }).end(JSON.stringify(body));
   if (req.method === "POST" && req.url === "/v1/contacts" && req.headers["idempotency-key"]) {
-    return send(200, { status: "success", id: "c1" });
+    return send(201, { status: "success", id: "c1" });
   }
-  if (req.method === "PATCH" && req.url === "/v1/deals/d1/fields" && req.headers["if-match"] === "r1") {
-    return send(200, { status: "success", revision: "r2" });
+  if (req.method === "PATCH" && req.url === "/v1/deals/d1" && req.headers["if-match"] === '"r1"') {
+    return send(200, { status: "success", revision: '"r2"' });
   }
   send(
     404,
@@ -60,7 +60,7 @@ try {
   try { createClient({ apiKey: "k" }); result.apiKeyGuard = false; } catch { result.apiKeyGuard = true; }
   const client = createClient({ token: () => "t", baseUrl: { crm: ${JSON.stringify(api.url)} }, allowLoopbackHttp: true, retries: 0 });
   result.created = (await client.crm.contacts.create({ name: "Tan" })).id;
-  result.revision = (await client.crm.deals.update({ id: "d1", if_match: "r1", remark: "x" })).revision;
+  result.revision = (await client.crm.deals.update({ id: "d1", if_match: '"r1"', remark: "x" })).revision;
   try { await client.crm.contacts.get({ id: "missing" }); } catch (e) {
     result.code = e.code; result.correlationId = e.correlationId; result.retryAfterMs = e.retryAfterMs;
   }
@@ -85,7 +85,7 @@ try {
   const tab = await browser.newPage();
   await tab.goto(site.url);
   const result = await tab.waitForFunction(() => window.__result, undefined, { timeout: 15_000 }).then((h) => h.jsonValue());
-  const want = { apiKeyGuard: true, created: "c1", revision: "r2", code: "NOT_FOUND", correlationId: "corr-1", retryAfterMs: 7000 };
+  const want = { apiKeyGuard: true, created: "c1", revision: '"r2"', code: "NOT_FOUND", correlationId: "corr-1", retryAfterMs: 7000 };
   for (const [key, value] of Object.entries(want)) {
     if (result[key] !== value) throw new Error(`chromium: ${key} is ${JSON.stringify(result[key])}, want ${value}: ${JSON.stringify(result)}`);
   }
