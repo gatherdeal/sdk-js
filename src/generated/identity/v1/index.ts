@@ -13,13 +13,19 @@ export const service = {
 export const operations = {
   outlets: {
     /**
+     * Fetch Outlet By ID
+     *
+     * Requires the permissions `identity.outlet.read`.
+     *
+     * Credentials are optional.
+     */
+    get: op.outletsGet,
+    /**
      * Fetch Outlets
      *
      * Lists the outlets visible to the caller.
      *
      * Requires the permissions `identity.outlet.read`.
-     *
-     * Organization API keys are not accepted.
      *
      * Credentials are optional.
      */

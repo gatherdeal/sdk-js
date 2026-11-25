@@ -47,7 +47,13 @@ export interface BusinessHours {
  * day is edited or reset.
  */
 export interface BusinessHoursDay {
+  /**
+   * Opening intervals of the day in start order, at most eight; empty when closed.
+   */
   intervals: BusinessHoursIntervalOutput[];
+  /**
+   * Revision of this day, changed only when the day is edited or reset.
+   */
   revision: number;
 }
 
@@ -56,35 +62,14 @@ export interface BusinessHoursDay {
  * Midnight-crossing openings are split into intervals on consecutive days.
  */
 export interface BusinessHoursIntervalOutput {
+  /**
+   * Closing time in local HH:mm, after start; "24:00" closes at midnight.
+   */
   end: string;
+  /**
+   * Opening time in local HH:mm, e.g. "09:00".
+   */
   start: string;
-}
-
-/**
- * CLIENT_CLOSED_REQUEST (499): The client closed the request.
- */
-export interface ClientClosedRequestProblem {
-  code: "CLIENT_CLOSED_REQUEST";
-  correlation_id?: string;
-  /**
-   * Localized instance-specific text.
-   */
-  detail?: string;
-  /**
-   * urn:gatherdeal:request:<correlation_id>
-   */
-  instance?: string;
-  record?: ProblemRecord;
-  retryable: false;
-  status: 499;
-  /**
-   * Localized by Accept-Language; English: "The client closed the request."
-   */
-  title: string;
-  /**
-   * Problem type URI, one-to-one with code; documentation only, never dereferenced at runtime.
-   */
-  type: "https://docs.gatherdeal.ai/errors/CLIENT_CLOSED_REQUEST";
 }
 
 /**
@@ -660,6 +645,14 @@ export interface DelegatedAccessUnsupportedProblem {
   type: "https://docs.gatherdeal.ai/errors/DELEGATED_ACCESS_UNSUPPORTED";
 }
 
+export interface FetchOutletByIDOutput {
+  outlet: Outlet;
+}
+
+export type FetchOutletByIDOutputEnvelope = FetchOutletByIDOutput & {
+  status: "success";
+};
+
 export interface FetchOutletsOutput {
   outlets: ListPageOutlet;
 }
@@ -706,10 +699,10 @@ export interface ForbiddenProblem {
 export interface Group {
   conjunction?: Conjunction;
   edge?: string;
-  groups?: Array<Group | null>;
+  groups?: Array<Group | null> | null;
   negated?: boolean;
   quantifier?: Quantifier;
-  rules?: Array<Rule | null>;
+  rules?: Array<Rule | null> | null;
 }
 
 /**
@@ -794,6 +787,33 @@ export interface IdentityOutletMembershipRequiredProblem {
 }
 
 /**
+ * IDENTITY_OUTLET_NOT_FOUND (404): Outlet not found.
+ */
+export interface IdentityOutletNotFoundProblem {
+  code: "IDENTITY_OUTLET_NOT_FOUND";
+  correlation_id?: string;
+  /**
+   * Localized instance-specific text.
+   */
+  detail?: string;
+  /**
+   * urn:gatherdeal:request:<correlation_id>
+   */
+  instance?: string;
+  record?: ProblemRecord;
+  retryable: false;
+  status: 404;
+  /**
+   * Localized by Accept-Language; English: "Outlet not found."
+   */
+  title: string;
+  /**
+   * Problem type URI, one-to-one with code; documentation only, never dereferenced at runtime.
+   */
+  type: "https://docs.gatherdeal.ai/errors/IDENTITY_OUTLET_NOT_FOUND";
+}
+
+/**
  * INTERNAL_ERROR (500): Internal server error.
  */
 export interface InternalErrorProblem {
@@ -824,7 +844,7 @@ export interface InternalErrorProblem {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageOutlet {
-  data: Array<Outlet | null>;
+  data: Outlet[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -841,9 +861,14 @@ export interface ListPageOutlet {
 export type Operator = "BETWEEN" | "CONTAINS" | "CONTAINS_FOLD" | "DWITHIN" | "ENDS_WITH" | "ENDS_WITH_FOLD" | "EQ" | "EQ_FOLD" | "GT" | "GTE" | "IN" | "IS_NOT_NULL" | "IS_NULL" | "LT" | "LTE" | "NEQ" | "NOT_IN" | "STARTS_WITH" | "STARTS_WITH_FOLD";
 
 /**
- * An outlet and its organization, owner, and operating settings.
+ * An outlet and its organization, owner, and operating settings. Anonymous
+ * callers receive the basic directory projection, which omits the audit
+ * instants, description and owner.
  */
 export interface Outlet {
+  /**
+   * Physical address of the outlet. Absent when unset.
+   */
   address?: {
     address?: string[];
     attention?: string;
@@ -863,30 +888,73 @@ export interface Outlet {
     zip_code?: string;
   };
   business_hours: BusinessHours | null;
+  /**
+   * Revision of the outlet's whole business-hours schedule, kept across
+   * resets; an inheriting outlet uses its own revision.
+   */
   business_hours_revision: number;
+  /**
+   * Business code of the outlet, unique across organizations. Look an outlet
+   * up by code with the list's exact code selector.
+   */
   code?: string;
+  /**
+   * When the outlet was created (UTC). Absent in the basic directory projection.
+   */
   create_at?: string;
   currency?: Currency;
+  /**
+   * When the outlet was deleted (UTC). Always absent here: outlet reads never
+   * return deleted outlets.
+   */
   delete_at?: string;
+  /**
+   * Free-text description. Absent when unset or in the basic directory projection.
+   */
   description?: string;
+  /**
+   * UUID of the outlet.
+   */
   id: string;
+  /**
+   * Whether this is a master (headquarters) outlet of its organization.
+   */
   is_master?: boolean;
+  /**
+   * Display name of the outlet.
+   */
   name: string;
   organization?: OutletOrganization;
+  /**
+   * UUID of the organization that owns the outlet.
+   */
   organization_id?: string;
   owner?: UserBrief;
+  /**
+   * UUID of the outlet's owner. Absent in the basic directory projection.
+   */
   owner_id?: string;
   /**
-   * Timezone override for this outlet; empty inherits the organization's value (see embedded organization).
+   * IANA time zone override for this outlet, e.g. "Asia/Kuala_Lumpur". Empty
+   * or absent means the organization's timezone applies (see the organization
+   * expansion).
    */
   timezone?: string;
+  /**
+   * When the outlet was last updated (UTC). Absent in the basic directory projection.
+   */
   update_at?: string;
 }
 
 /**
- * Organization details included in an outlet response.
+ * Organization details included in an outlet response. The contact fields
+ * (phone, address, email, website) appear only in the basic directory
+ * projection.
  */
 export interface OutletOrganization {
+  /**
+   * Public address of the organization. Basic directory projection only; absent when unset.
+   */
   address?: {
     address?: string[];
     attention?: string;
@@ -906,22 +974,42 @@ export interface OutletOrganization {
     zip_code?: string;
   };
   business_hours: BusinessHours | null;
+  /**
+   * Revision of the organization's whole business-hours schedule, kept across resets.
+   */
   business_hours_revision: number;
+  /**
+   * Business code of the organization.
+   */
   code?: string;
   currency?: Currency;
-  distribution_id?: string;
+  /**
+   * Public contact email of the organization. Basic directory projection only; may be empty.
+   */
   email?: string;
-  id?: string;
+  /**
+   * UUID of the organization.
+   */
+  id: string;
+  /**
+   * Logo of the organization. Absent when unset.
+   */
   logo?: string;
+  /**
+   * Display name of the organization.
+   */
   name?: string;
   /**
-   * Phone with an explicit country code: "+<country code> <number>" or "(<country code>)<number>", e.g. "+60 123456789". A space or hyphen may separate a plus-prefixed country code from the number. The number accepts spaces, hyphens, periods, and simple balanced parentheses around area codes. Compact E.164 strings such as "+60123456789" use assigned ITU calling codes, validated at runtime. Output is canonical "(60)123456789".
+   * Public contact phone of the organization. Basic directory projection only; absent when unset.
    */
   phone?: string;
   /**
    * Organization timezone used as the fallback when the outlet's timezone is empty.
    */
   timezone?: string;
+  /**
+   * Website of the organization. Basic directory projection only; may be empty.
+   */
   website?: string;
 }
 
@@ -1136,8 +1224,17 @@ export interface UnauthorizedProblem {
  * `profile_image`.
  */
 export interface UserBrief {
-  id?: string;
+  /**
+   * UUID of the user.
+   */
+  id: string;
+  /**
+   * Display name of the user. Absent when the user has no name.
+   */
   name?: string;
+  /**
+   * Profile image of the user. Absent when unset.
+   */
   profile_image?: string;
 }
 

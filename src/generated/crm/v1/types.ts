@@ -543,33 +543,6 @@ export interface CRMSalesPipelineStageNotFoundProblem {
 }
 
 /**
- * CLIENT_CLOSED_REQUEST (499): The client closed the request.
- */
-export interface ClientClosedRequestProblem {
-  code: "CLIENT_CLOSED_REQUEST";
-  correlation_id?: string;
-  /**
-   * Localized instance-specific text.
-   */
-  detail?: string;
-  /**
-   * urn:gatherdeal:request:<correlation_id>
-   */
-  instance?: string;
-  record?: ProblemRecord;
-  retryable: false;
-  status: 499;
-  /**
-   * Localized by Accept-Language; English: "The client closed the request."
-   */
-  title: string;
-  /**
-   * Problem type URI, one-to-one with code; documentation only, never dereferenced at runtime.
-   */
-  type: "https://docs.gatherdeal.ai/errors/CLIENT_CLOSED_REQUEST";
-}
-
-/**
  * ClientUpgradeRequiredDetails are the details of CLIENT_UPGRADE_REQUIRED.
  */
 export interface ClientUpgradeRequiredDetails {
@@ -1117,8 +1090,8 @@ export interface Deal {
   remark?: string;
   /**
    * Revision is the deal's opaque strong entity tag, quotes included. Send it
-   * unchanged as If-Match to move or update the deal; any write to the deal
-   * changes it.
+   * unchanged as If-Match to update the deal; any write to the deal changes
+   * it.
    */
   revision: string;
   stage: DealStage;
@@ -1152,6 +1125,12 @@ export interface DealBrief {
    */
   pipeline_id: string;
   priority?: SalesPipelineDealPriority;
+  /**
+   * Revision is the deal's opaque strong entity tag, quotes included. Send it
+   * unchanged as If-Match to update the deal; any write to the deal changes
+   * it.
+   */
+  revision: string;
   stage: DealStage;
   /**
    * ID of the deal's current stage.
@@ -2183,6 +2162,33 @@ export interface PreconditionFailedProblem {
   type: "https://docs.gatherdeal.ai/errors/PRECONDITION_FAILED";
 }
 
+/**
+ * PRECONDITION_REQUIRED (428): This request must be conditional. Send If-Match with the revision from the latest read.
+ */
+export interface PreconditionRequiredProblem {
+  code: "PRECONDITION_REQUIRED";
+  correlation_id?: string;
+  /**
+   * Localized instance-specific text.
+   */
+  detail?: string;
+  /**
+   * urn:gatherdeal:request:<correlation_id>
+   */
+  instance?: string;
+  record?: ProblemRecord;
+  retryable: false;
+  status: 428;
+  /**
+   * Localized by Accept-Language; English: "This request must be conditional. Send If-Match with the revision from the latest read."
+   */
+  title: string;
+  /**
+   * Problem type URI, one-to-one with code; documentation only, never dereferenced at runtime.
+   */
+  type: "https://docs.gatherdeal.ai/errors/PRECONDITION_REQUIRED";
+}
+
 export interface ProblemParameter {
   in: "header" | "path" | "query" | (string & {});
   name: string;
@@ -2342,12 +2348,29 @@ export interface UnauthorizedProblem {
  * An omitted field keeps its value and null clears it. A remark keeps 1 to 500
  * characters after trimming each line.
  */
+export interface UpdateDealFieldsInput {
+  priority?: SalesPipelineDealPriorityRequest | null;
+  /**
+   * Deal remark; null clears it.
+   */
+  remark?: string | null;
+  type?: SalesPipelineDealTypeRequest | null;
+}
+
+/**
+ * An omitted field keeps its value and null clears it. A remark keeps 1 to 500
+ * characters after trimming each line.
+ */
 export interface UpdateDealInput {
   priority?: SalesPipelineDealPriorityRequest | null;
   /**
    * Deal remark; null clears it.
    */
   remark?: string | null;
+  /**
+   * Target stage; it must belong to the deal's current pipeline.
+   */
+  stage_id?: string;
   type?: SalesPipelineDealTypeRequest | null;
 }
 

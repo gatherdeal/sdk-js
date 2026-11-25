@@ -6,7 +6,6 @@ import type * as T from "./types.js";
 /** Every problem code the operations of this API version declare. */
 export const problems = {
   BAD_REQUEST: { status: 400, retryable: false },
-  CLIENT_CLOSED_REQUEST: { status: 499, retryable: false },
   CLIENT_UPGRADE_REQUIRED: { status: 426, retryable: false, details: { client: ["string"], current_version: ["string"], min_version: ["string"] } },
   DELEGATED_ACCESS_AUDIENCE_MISMATCH: { status: 403, retryable: false, details: { reason: ["string"] } },
   DELEGATED_ACCESS_CREDENTIAL_LOCATION: { status: 401, retryable: false, details: { reason: ["string"] } },
@@ -29,6 +28,7 @@ export const problems = {
   IDENTITY_DISTRIBUTION_NOT_FOUND: { status: 404, retryable: false },
   IDENTITY_ORGANIZATION_NOT_FOUND: { status: 404, retryable: false },
   IDENTITY_OUTLET_MEMBERSHIP_REQUIRED: { status: 403, retryable: false },
+  IDENTITY_OUTLET_NOT_FOUND: { status: 404, retryable: false },
   INTERNAL_ERROR: { status: 500, retryable: false },
   PAGINATION_CURSOR_INVALID: { status: 400, retryable: false, details: { reason: ["string"] } },
   PAGINATION_PARAMS_INVALID: { status: 400, retryable: false, details: { reason: ["string"] } },

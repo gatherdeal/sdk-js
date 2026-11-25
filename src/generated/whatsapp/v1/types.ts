@@ -5,11 +5,17 @@ export interface AddBroadcastRecipientsInput {
    * Up to 1000 recipients; a number the broadcast already has is a
    * duplicate (the first wins).
    */
-  recipients: BroadcastRecipientInput[];
+  recipients: BroadcastRecipientInput[] | null;
 }
 
 export interface AddBroadcastRecipientsOutput {
+  /**
+   * Recipients added.
+   */
   added: number;
+  /**
+   * Recipients skipped as duplicates.
+   */
   duplicates: number;
 }
 
@@ -18,30 +24,64 @@ export type AddBroadcastRecipientsOutputEnvelope = AddBroadcastRecipientsOutput 
 };
 
 export interface AddBroadcastSuppressionsInput {
+  /**
+   * Free-text note stored with every added number.
+   */
   note?: string;
   /**
    * Up to 1000 numbers; a number already on the list is a duplicate.
    */
-  to: Array<string | null>;
+  to: Array<string | null> | null;
 }
 
 /**
  * A WhatsApp connection used to send messages.
  */
 export interface Agent {
-  create_at?: string;
+  /**
+   * When the agent was created.
+   */
+  create_at: string;
   current_run?: AgentCurrentRun;
-  description?: string;
+  /**
+   * Free-text description; empty when none was set.
+   */
+  description: string;
+  /**
+   * Distribution the agent belongs to.
+   */
   distribution_id?: string;
   egress?: AgentEgress;
+  /**
+   * Error from the agent's last failure; absent when there is none.
+   */
   error_message?: string;
-  id?: string;
+  /**
+   * Agent ID.
+   */
+  id: string;
+  /**
+   * Whether the agent is reserved for platform use; visible only to platform operators.
+   */
+  is_system?: boolean;
+  /**
+   * When the agent last reported a heartbeat; absent until its first one.
+   */
   last_heartbeat_at?: string;
-  name?: string;
+  /**
+   * Display name; empty when none was set.
+   */
+  name: string;
+  /**
+   * Organization that owns the agent.
+   */
   organization_id?: string;
+  /**
+   * Outlet the agent is assigned to; null when it is not assigned to an outlet.
+   */
   outlet_id: string | null;
   /**
-   * Phone with an explicit country code: "+<country code> <number>" or "(<country code>)<number>", e.g. "+60 123456789". A space or hyphen may separate a plus-prefixed country code from the number. The number accepts spaces, hyphens, periods, and simple balanced parentheses around area codes. Compact E.164 strings such as "+60123456789" use assigned ITU calling codes, validated at runtime. Output is canonical "(60)123456789".
+   * The WhatsApp phone number the agent is linked to; absent until paired.
    */
   phone?: string;
   phone_activity?: AgentPhoneActivity;
@@ -55,12 +95,21 @@ export interface Agent {
    */
   phone_last_seen_at?: string;
   /**
-   * The connection runtime, when assigned.
+   * The agent's revision, an opaque quoted entity tag. Send it in If-Match
+   * to update the agent; it changes when the outlet assignment changes.
+   */
+  revision: string;
+  /**
+   * The connection runtime: eks for a controller-managed agent; absent at
+   * runtime generation zero.
    */
   runtime?: string;
+  /**
+   * The agent's runtime generation, including zero; visible only to platform operators.
+   */
   runtime_generation?: number;
   send_pacing?: SendPacingOutput;
-  status?: AgentStatus;
+  status: AgentStatus;
   /**
    * Time when the connection status last changed.
    */
@@ -71,10 +120,9 @@ export interface Agent {
   stop_detail?: string;
   stop_reason?: AgentStopReason;
   /**
-   * Whether the agent is reserved for platform use; visible only to platform operators.
+   * When the agent was last changed.
    */
-  system?: boolean;
-  update_at?: string;
+  update_at: string;
   /**
    * Last reported WhatsApp web client version; visible only to platform operators.
    */
@@ -83,22 +131,54 @@ export interface Agent {
 
 export interface AgentCurrentRun {
   capacity_state: RunCapacityState;
+  /**
+   * Runtime generation the run belongs to.
+   */
   generation: number;
+  /**
+   * Run ID.
+   */
   id: string;
+  /**
+   * Runtime node hosting the run; visible only to platform operators.
+   */
   node_ref?: string;
+  /**
+   * When the run first came online; absent until then.
+   */
   online_at?: string;
+  /**
+   * When the run started; absent until it starts.
+   */
   started_at?: string;
 }
 
 export interface AgentDeletion {
+  /**
+   * The agent being deleted.
+   */
   agent_id: string;
+  /**
+   * When the deletion was requested.
+   */
   requested_at: string;
-  status: string;
+  status: AgentDeletionStatus;
 }
 
+export type AgentDeletionStatus = "deleted" | "deleting" | (string & {});
+
 export interface AgentEgress {
+  /**
+   * Active IPv6 egress address (/128); absent when the group has none active.
+   */
   active_ipv6?: string;
+  /**
+   * Egress group the agent sends through.
+   */
   egress_group_id: string;
+  /**
+   * Egress shard of the active address, when one is active.
+   */
   shard_id?: string;
 }
 
@@ -106,12 +186,26 @@ export interface AgentEgress {
  * Identifies the agent that cannot be found.
  */
 export interface AgentNotFoundDetails {
+  /**
+   * The agent that was not found.
+   */
   agent_id: string;
 }
 
 export interface AgentPairing {
+  /**
+   * When the pairing attempt expires.
+   */
   expires_at: string;
+  /**
+   * The current linking code to enter on the phone; present only while
+   * pending, when a phone number was given at create.
+   */
   pairing_code?: string;
+  /**
+   * The current QR code payload to render and scan; present only while
+   * pending and the code has not yet rotated out.
+   */
   qr?: string;
   status: AgentPairingStatus;
 }
@@ -122,7 +216,13 @@ export type AgentPairingStatus = "connected" | "expired" | "failed" | "pending" 
  * The pending message count and the maximum allowed for the agent.
  */
 export interface AgentPendingMessagesLimitReachedDetails {
+  /**
+   * Maximum pending messages allowed for the agent.
+   */
   limit: number;
+  /**
+   * Messages currently pending for the agent.
+   */
   pending: number;
 }
 
@@ -168,12 +268,24 @@ export interface BadRequestProblem {
 
 export interface Broadcast {
   affinity_fallback: BroadcastAffinityFallback;
+  /**
+   * When the broadcast completed or was canceled.
+   */
   completed_at?: string;
   content: BroadcastContentOutput;
+  /**
+   * When the broadcast was created.
+   */
   create_at: string;
   distribution: BroadcastDistribution;
+  /**
+   * Broadcast ID.
+   */
   id: string;
   interval: BroadcastIntervalOutput;
+  /**
+   * Broadcast name.
+   */
   name: string;
   /**
    * Recipients not sent by then expire; set at start (default 30 days).
@@ -183,8 +295,14 @@ export interface Broadcast {
    * Sending does not start before this time.
    */
   not_before?: string;
+  /**
+   * Organization that owns the broadcast.
+   */
   organization_id: string;
   pause_reason?: BroadcastPauseReason;
+  /**
+   * Orders the broadcast's messages within the broadcast class.
+   */
   priority_offset: number;
   progress: BroadcastProgress;
   send_window?: SendWindowOutput;
@@ -193,9 +311,18 @@ export interface Broadcast {
    * counted across every broadcast using it.
    */
   sender_daily_limit: number;
+  /**
+   * The broadcast's sender agents and their progress.
+   */
   senders: BroadcastSender[];
+  /**
+   * When the broadcast was first started.
+   */
   started_at?: string;
   status: BroadcastStatus;
+  /**
+   * When the broadcast was last changed.
+   */
   update_at: string;
 }
 
@@ -251,7 +378,13 @@ export type BroadcastDistributionRequest = "affinity" | "round_robin";
  * message for the drawn time. 10 000 <= min_ms <= max_ms <= 600 000.
  */
 export interface BroadcastInterval {
+  /**
+   * Longest cooldown, in milliseconds; at least min_ms.
+   */
   max_ms: number;
+  /**
+   * Shortest cooldown, in milliseconds.
+   */
   min_ms: number;
 }
 
@@ -261,7 +394,13 @@ export interface BroadcastInterval {
  * message for the drawn time. 10 000 <= min_ms <= max_ms <= 600 000.
  */
 export interface BroadcastIntervalOutput {
+  /**
+   * Longest cooldown, in milliseconds; at least min_ms.
+   */
   max_ms: number;
+  /**
+   * Shortest cooldown, in milliseconds.
+   */
   min_ms: number;
 }
 
@@ -269,7 +408,13 @@ export interface BroadcastIntervalOutput {
  * The limit that was reached and the count it applies to.
  */
 export interface BroadcastLimitReachedDetails {
+  /**
+   * The current count the limit applies to; for recipients, it includes the requested ones.
+   */
   count: number;
+  /**
+   * The limit that was reached.
+   */
   limit: number;
 }
 
@@ -277,11 +422,14 @@ export interface BroadcastLimitReachedDetails {
  * Identifies the broadcast that cannot be found.
  */
 export interface BroadcastNotFoundDetails {
+  /**
+   * The broadcast that was not found.
+   */
   broadcast_id: string;
 }
 
 export interface BroadcastOutput {
-  broadcast?: Broadcast;
+  broadcast: Broadcast;
 }
 
 export type BroadcastOutputEnvelope = BroadcastOutput & {
@@ -297,13 +445,37 @@ export type BroadcastPauseReason = "failure_rate" | "no_senders" | "requested" |
  * BroadcastProgress counts the recipients by status.
  */
 export interface BroadcastProgress {
+  /**
+   * Recipients canceled with the broadcast.
+   */
   canceled: number;
+  /**
+   * Recipients whose message was sent to WhatsApp.
+   */
   delivered: number;
+  /**
+   * Recipients not sent before the broadcast's not_after.
+   */
   expired: number;
+  /**
+   * Recipients whose send failed.
+   */
   failed: number;
+  /**
+   * Recipients not yet handed to a sender.
+   */
   pending: number;
+  /**
+   * Recipients whose message is queued on a sender.
+   */
   queued: number;
+  /**
+   * Recipients skipped because their number is suppressed.
+   */
   suppressed: number;
+  /**
+   * All recipients of the broadcast.
+   */
   total: number;
 }
 
@@ -312,25 +484,44 @@ export interface BroadcastRecipient {
    * The WhatsApp connection assigned to send to this recipient.
    */
   agent_id?: string;
+  /**
+   * When the recipient was added.
+   */
   create_at: string;
   error?: BroadcastRecipientError;
+  /**
+   * Recipient ID.
+   */
   id: string;
   /**
    * The message sent or scheduled for this recipient.
    */
   message_id?: string;
+  /**
+   * The template values for this recipient, by parameter name; absent for
+   * text content.
+   */
   params?: Record<string, TemplateDateValueOutput | TemplateDatetimeValueOutput | TemplateMoneyValueOutput | TemplateTextValueOutput>;
+  /**
+   * The recipient's place in upload order.
+   */
   position: number;
   /**
    * The sender the recipient last talked to (affinity), if any.
    */
   preferred_agent_id?: string;
+  /**
+   * When the recipient reached a final status.
+   */
   settled_at?: string;
   status: BroadcastRecipientStatus;
   /**
-   * Phone with an explicit country code: "+<country code> <number>" or "(<country code>)<number>", e.g. "+60 123456789". A space or hyphen may separate a plus-prefixed country code from the number. The number accepts spaces, hyphens, periods, and simple balanced parentheses around area codes. Compact E.164 strings such as "+60123456789" use assigned ITU calling codes, validated at runtime. Output is canonical "(60)123456789".
+   * The recipient's phone number.
    */
   to: string | null;
+  /**
+   * When the recipient last changed.
+   */
   update_at: string;
 }
 
@@ -344,9 +535,13 @@ export type BroadcastRecipientError = "invalid_number" | "no_sender" | "render_f
  * and, for template content, the template's values for it.
  */
 export interface BroadcastRecipientInput {
-  params?: Record<string, TemplateDateValue | TemplateDatetimeValue | TemplateMoneyValue | TemplateTextValue>;
   /**
-   * Phone with an explicit country code: "+<country code> <number>" or "(<country code>)<number>", e.g. "+60 123456789". A space or hyphen may separate a plus-prefixed country code from the number. The number accepts spaces, hyphens, periods, and simple balanced parentheses around area codes. Compact E.164 strings such as "+60123456789" use assigned ITU calling codes, validated at runtime. Output is canonical "(60)123456789".
+   * The template's values for this recipient, by parameter name; required
+   * for template content, not allowed for text content.
+   */
+  params?: Record<string, TemplateDateValue | TemplateDatetimeValue | TemplateMoneyValue | TemplateTextValue> | null;
+  /**
+   * The recipient's phone number.
    */
   to: string | null;
 }
@@ -359,10 +554,25 @@ export type BroadcastRecipientStatusRequest = "canceled" | "delivered" | "expire
  * BroadcastSender is one sender agent and the recipients it took.
  */
 export interface BroadcastSender {
+  /**
+   * The sender agent.
+   */
   agent_id: string;
+  /**
+   * Recipients this sender delivered.
+   */
   delivered: number;
+  /**
+   * Recipients whose send failed on this sender.
+   */
   failed: number;
+  /**
+   * The sender's place in the broadcast's sender order.
+   */
   position: number;
+  /**
+   * Recipients queued on this sender.
+   */
   queued: number;
   state: BroadcastSenderState;
 }
@@ -376,6 +586,9 @@ export type BroadcastSenderState = "active" | "lost" | (string & {});
  * Identifies the sender agent the broadcast cannot use.
  */
 export interface BroadcastSenderUnavailableDetails {
+  /**
+   * The sender agent the broadcast cannot use.
+   */
   agent_id: string;
 }
 
@@ -383,6 +596,9 @@ export interface BroadcastSenderUnavailableDetails {
  * The broadcast's current status, which does not allow the action.
  */
 export interface BroadcastStateConflictDetails {
+  /**
+   * The broadcast's current status.
+   */
   status: string;
 }
 
@@ -399,11 +615,20 @@ export type BroadcastStatus = "canceled" | "completed" | "draft" | "paused" | "r
 export type BroadcastStatusRequest = "canceled" | "completed" | "draft" | "paused" | "running" | "scheduled";
 
 export interface BroadcastSuppression {
-  create_at: string;
-  id: string;
-  note?: string;
   /**
-   * Phone with an explicit country code: "+<country code> <number>" or "(<country code>)<number>", e.g. "+60 123456789". A space or hyphen may separate a plus-prefixed country code from the number. The number accepts spaces, hyphens, periods, and simple balanced parentheses around area codes. Compact E.164 strings such as "+60123456789" use assigned ITU calling codes, validated at runtime. Output is canonical "(60)123456789".
+   * When the number was suppressed.
+   */
+  create_at: string;
+  /**
+   * Suppression ID.
+   */
+  id: string;
+  /**
+   * Free-text note given when the number was added; empty when none.
+   */
+  note: string;
+  /**
+   * The suppressed phone number; broadcasts skip it.
    */
   to: string | null;
 }
@@ -412,6 +637,9 @@ export interface BroadcastSuppression {
  * BroadcastTemplateReference names the template a broadcast renders.
  */
 export interface BroadcastTemplateReference {
+  /**
+   * The message template to render.
+   */
   id: string;
 }
 
@@ -419,6 +647,9 @@ export interface BroadcastTemplateReference {
  * BroadcastTemplateReference names the template a broadcast renders.
  */
 export interface BroadcastTemplateReferenceOutput {
+  /**
+   * The message template to render.
+   */
   id: string;
 }
 
@@ -426,17 +657,29 @@ export interface BroadcastTemplateReferenceOutput {
  * Chat is one WhatsApp conversation of an agent.
  */
 export interface Chat {
+  /**
+   * The agent whose chat this is.
+   */
   agent_id: string;
+  /**
+   * When the chat was first seen.
+   */
   create_at: string;
   /**
    * The disappearing-message timer, in seconds; 0 when off.
    */
   ephemeral_seconds: number;
   /**
-   * The group JID, "<id>@g.us".
+   * The group JID, "<id>@g.us"; absent for a direct chat.
    */
   group_jid?: string;
+  /**
+   * Chat ID.
+   */
   id: string;
+  /**
+   * When the chat's latest message was sent; absent before any message.
+   */
   last_message_at?: string;
   /**
    * Set when this chat was found to be the same conversation as another;
@@ -444,10 +687,13 @@ export interface Chat {
    */
   merged_into_id?: string;
   /**
-   * The group subject.
+   * The group subject; absent for a direct chat or an unnamed group.
    */
   name?: string;
   type: ChatType;
+  /**
+   * When the chat last changed.
+   */
   update_at: string;
   user?: ChatParty;
 }
@@ -457,15 +703,31 @@ export interface Chat {
  * another message is a tombstone: only id, rev and merged_into_id are set.
  */
 export interface ChatMessage {
+  /**
+   * The agent whose ledger holds the message; absent on a tombstone.
+   */
   agent_id?: string;
+  /**
+   * The chat the message belongs to; absent on a tombstone.
+   */
   chat_id?: string;
   content?: Content;
+  /**
+   * When the message was last edited.
+   */
   edited_at?: string;
   /**
    * When a disappearing message's content goes away.
    */
   expires_at?: string;
+  /**
+   * Chat message ID.
+   */
   id: string;
+  /**
+   * True for a view-once message; absent otherwise.
+   */
+  is_view_once?: boolean;
   /**
    * Set on a tombstone: the message this copy was merged into.
    */
@@ -475,24 +737,32 @@ export interface ChatMessage {
    * The chat message this one replies to.
    */
   quoted_id?: string;
-  reactions?: Array<ChatReaction | null>;
+  /**
+   * Current reactions, one per reacting user; absent when there are none.
+   */
+  reactions?: ChatReaction[];
   receipt?: MessageReceipt;
   /**
    * Message revision. Pass it as `after_rev` when polling
    * `GET /v1/chat-messages` for later changes.
    */
   rev: number;
+  /**
+   * When the message was deleted for everyone.
+   */
   revoked_at?: string;
   sender?: ChatParty;
+  /**
+   * When the message was sent, as WhatsApp reports it.
+   */
   sent_at?: string;
   source?: ChatMessageSource;
   /**
    * The chat message a poll vote refers to.
    */
   target_id?: string;
-  view_once?: boolean;
   /**
-   * The WhatsApp message ID.
+   * The WhatsApp message ID; absent on a tombstone.
    */
   wid?: string;
 }
@@ -502,6 +772,9 @@ export type ChatMessageOrigin = "api" | "device" | "remote" | (string & {});
 export type ChatMessageSource = "backfill" | "history" | "live" | "on_demand" | (string & {});
 
 export interface ChatNotFoundDetails {
+  /**
+   * The chat that was not found.
+   */
   chat_id: string;
 }
 
@@ -509,29 +782,47 @@ export interface ChatNotFoundDetails {
  * ChatParty is one WhatsApp user as the agent's account sees them.
  */
 export interface ChatParty {
+  /**
+   * The user's WhatsApp Business name; absent when not a business or unknown.
+   */
   business_name?: string;
+  /**
+   * WhatsApp user ID in this service.
+   */
   id: string;
   /**
-   * The user's LID (privacy identity), "<digits>@lid".
+   * Whether this is the agent's own account.
+   */
+  is_self: boolean;
+  /**
+   * The user's LID (privacy identity), "<digits>@lid"; absent when unknown.
    */
   lid?: string;
   /**
-   * The user's phone JID, "<digits>@s.whatsapp.net", when known.
+   * The user's phone JID, "<digits>@s.whatsapp.net"; absent when unknown.
    */
   phone?: string;
-  push_name?: string;
   /**
-   * The agent's own account.
+   * The name the user set on WhatsApp; absent when unknown.
    */
-  self?: boolean;
+  push_name?: string;
 }
 
 /**
  * ChatReaction is one user's current reaction to a chat message.
  */
 export interface ChatReaction {
+  /**
+   * The reaction emoji.
+   */
   emoji: string;
+  /**
+   * When the user reacted.
+   */
   reacted_at: string;
+  /**
+   * The reacting WhatsApp user.
+   */
   user_id: string;
 }
 
@@ -546,39 +837,18 @@ export interface ChatReaction {
  * or match one of the JIDs in `user`, depending on the chat type.
  */
 export interface ChatRef {
+  /**
+   * The group JID ending in `@g.us`; absent for a direct chat.
+   */
   group_jid?: string;
+  /**
+   * The address messages to the chat are sent to; absent when unknown.
+   */
   send_jid?: string;
   user?: Party;
 }
 
 export type ChatType = "direct" | "group" | (string & {});
-
-/**
- * CLIENT_CLOSED_REQUEST (499): The client closed the request.
- */
-export interface ClientClosedRequestProblem {
-  code: "CLIENT_CLOSED_REQUEST";
-  correlation_id?: string;
-  /**
-   * Localized instance-specific text.
-   */
-  detail?: string;
-  /**
-   * urn:gatherdeal:request:<correlation_id>
-   */
-  instance?: string;
-  record?: ProblemRecord;
-  retryable: false;
-  status: 499;
-  /**
-   * Localized by Accept-Language; English: "The client closed the request."
-   */
-  title: string;
-  /**
-   * Problem type URI, one-to-one with code; documentation only, never dereferenced at runtime.
-   */
-  type: "https://docs.gatherdeal.ai/errors/CLIENT_CLOSED_REQUEST";
-}
 
 /**
  * ClientUpgradeRequiredDetails are the details of CLIENT_UPGRADE_REQUIRED.
@@ -657,7 +927,13 @@ export interface ConflictProblem {
  * ContactCard is one shared contact.
  */
 export interface ContactCard {
+  /**
+   * The name shown for the contact; absent when the sender supplied none.
+   */
   display_name?: string;
+  /**
+   * The contact as a vCard.
+   */
   vcard: string;
 }
 
@@ -692,6 +968,9 @@ export type Content = {
  */
 export interface ContentAudio {
   media: MediaMeta;
+  /**
+   * True when the audio is a push-to-talk voice note; absent when false.
+   */
   voice_note?: boolean;
 }
 
@@ -699,7 +978,14 @@ export interface ContentAudio {
  * ContentButton is one button or list row. `id` is the reply identifier.
  */
 export interface ContentButton {
+  /**
+   * The WhatsApp reply identifier of the button, not a UUID; absent when
+   * the message gave none.
+   */
   id?: string;
+  /**
+   * The button or row label.
+   */
   text: string;
 }
 
@@ -707,7 +993,13 @@ export interface ContentButton {
  * ContentCall records an unanswered incoming call.
  */
 export interface ContentCall {
+  /**
+   * The WhatsApp call identifier, not a UUID.
+   */
   call_id: string;
+  /**
+   * True for a video call; absent for a voice call.
+   */
   video?: boolean;
 }
 
@@ -715,6 +1007,9 @@ export interface ContentCall {
  * ContentContacts contains one or more shared contact cards in `contacts`.
  */
 export interface ContentContacts {
+  /**
+   * The shared contact cards, 1 to 256.
+   */
   contacts: ContactCard[];
 }
 
@@ -723,7 +1018,13 @@ export interface ContentContacts {
  * message, mentions and whether the message was forwarded.
  */
 export interface ContentContext {
+  /**
+   * True when the message was forwarded; absent when false.
+   */
   forwarded?: boolean;
+  /**
+   * The mentioned users, at most 1,024; absent when there are none.
+   */
   mentions?: Party[];
   quoted?: MessageKey;
 }
@@ -733,9 +1034,18 @@ export interface ContentContext {
  * is available in `media.file_name` when supplied.
  */
 export interface ContentDocument {
+  /**
+   * The document caption; absent when there is none.
+   */
   caption?: string;
   media: MediaMeta;
+  /**
+   * The number of pages; absent when unknown.
+   */
   page_count?: number;
+  /**
+   * The document title; absent when the sender supplied none.
+   */
   title?: string;
 }
 
@@ -743,6 +1053,9 @@ export interface ContentDocument {
  * ContentImage is an image with an optional `caption`.
  */
 export interface ContentImage {
+  /**
+   * The image caption; absent when there is none.
+   */
   caption?: string;
   media: MediaMeta;
 }
@@ -753,9 +1066,21 @@ export interface ContentImage {
  * rows included).
  */
 export interface ContentInteractive {
+  /**
+   * The message body; absent when there is none.
+   */
   body?: string;
+  /**
+   * The buttons and list rows, at most 64; absent when there are none.
+   */
   buttons?: ContentButton[];
+  /**
+   * The message footer; absent when there is none.
+   */
   footer?: string;
+  /**
+   * The message title; absent when there is none.
+   */
   title?: string;
 }
 
@@ -766,7 +1091,15 @@ export interface ContentInteractive {
  * original message.
  */
 export interface ContentInteractiveReply {
+  /**
+   * The WhatsApp reply identifier of the chosen button or row, not a
+   * UUID; absent when WhatsApp sent none. At least one of `selected_id`
+   * and `text` is present.
+   */
   selected_id?: string;
+  /**
+   * The label the user saw; absent when WhatsApp sent none.
+   */
   text?: string;
 }
 
@@ -775,8 +1108,17 @@ export interface ContentInteractiveReply {
  * message. The preview omits the thumbnail.
  */
 export interface ContentLinkPreview {
+  /**
+   * The page description; absent when WhatsApp sent none.
+   */
   description?: string;
+  /**
+   * The page title; absent when WhatsApp sent none.
+   */
   title?: string;
+  /**
+   * The previewed link; absent when WhatsApp sent none.
+   */
   url?: string;
 }
 
@@ -785,12 +1127,34 @@ export interface ContentLinkPreview {
  * represent the initial point of a live location.
  */
 export interface ContentLocation {
+  /**
+   * The place address; absent when there is none.
+   */
   address?: string;
+  /**
+   * The location caption; absent when there is none.
+   */
   caption?: string;
+  /**
+   * Latitude in degrees, from -90 to 90.
+   */
   latitude: number;
+  /**
+   * True when the location is the start of a live location; absent when
+   * false.
+   */
   live?: boolean;
+  /**
+   * Longitude in degrees, from -180 to 180.
+   */
   longitude: number;
+  /**
+   * The place name; absent when there is none.
+   */
   name?: string;
+  /**
+   * A link for the place; absent when there is none.
+   */
   url?: string;
 }
 
@@ -799,8 +1163,18 @@ export interface ContentLocation {
  * voter may select. Zero allows any number.
  */
 export interface ContentPoll {
+  /**
+   * The option labels, 1 to 64 distinct values.
+   */
   options: string[];
+  /**
+   * The poll question.
+   */
   question: string;
+  /**
+   * The most options a voter may select; absent when any number is
+   * allowed.
+   */
   selectable_count?: number;
 }
 
@@ -811,6 +1185,10 @@ export interface ContentPoll {
  * not be decrypted appears as `unavailable`, with the poll in `target`.
  */
 export interface ContentPollVote {
+  /**
+   * Lowercase hex SHA-256 hashes of the selected option labels, at most
+   * 64; absent when the vote clears an earlier one.
+   */
   option_hashes?: string[];
   target: MessageKey;
 }
@@ -819,6 +1197,9 @@ export interface ContentPollVote {
  * ContentSticker is a sticker, including Lottie stickers.
  */
 export interface ContentSticker {
+  /**
+   * True for an animated sticker; absent when false.
+   */
   animated?: boolean;
   media: MediaMeta;
 }
@@ -835,11 +1216,34 @@ export interface ContentSticker {
  *   - `group_announce_changed` and `group_locked_changed` use `enabled`.
  */
 export interface ContentSystem {
+  /**
+   * The new setting for `group_announce_changed` (only admins may send)
+   * and `group_locked_changed` (only admins may edit group info); absent
+   * for other events.
+   */
   enabled?: boolean;
+  /**
+   * The new disappearing-message timer in seconds for
+   * `ephemeral_changed`; zero disables it. Absent for other events.
+   */
   ephemeral_seconds?: number;
+  /**
+   * The kind of chat event; it determines which other fields are present.
+   */
   event: string;
+  /**
+   * The new group name for `group_name_changed`; absent for other events.
+   */
   name?: string;
+  /**
+   * The affected participants for `group_participants_*`, 1 to 1,024;
+   * absent for other events.
+   */
   participants?: Party[];
+  /**
+   * The new group topic for `group_topic_changed`; absent for other
+   * events and when the topic was removed.
+   */
   topic?: string;
 }
 
@@ -847,6 +1251,9 @@ export interface ContentSystem {
  * ContentText contains a plain or extended text message in `body`.
  */
 export interface ContentText {
+  /**
+   * The message text.
+   */
   body: string;
   preview?: ContentLinkPreview;
 }
@@ -864,6 +1271,9 @@ export type ContentType = "audio" | "call" | "contacts" | "document" | "image" |
  */
 export interface ContentUnavailable {
   expected_type?: ContentType;
+  /**
+   * Why the content is unavailable.
+   */
   reason: string;
   target?: MessageKey;
 }
@@ -873,8 +1283,19 @@ export interface ContentUnavailable {
  * represented. Read `reason` for the cause.
  */
 export interface ContentUnsupported {
+  /**
+   * The protocol field number of `proto_field`; absent when no known
+   * field was set.
+   */
   field_number?: number;
+  /**
+   * The WhatsApp protocol field that carried the content; absent when no
+   * known field was set.
+   */
   proto_field?: string;
+  /**
+   * Why the content is not represented.
+   */
   reason: string;
 }
 
@@ -1219,13 +1640,25 @@ export interface ContentVariant9 {
  * a round video note.
  */
 export interface ContentVideo {
+  /**
+   * The video caption; absent when there is none.
+   */
   caption?: string;
+  /**
+   * True when the video plays as a GIF; absent when false.
+   */
   gif_playback?: boolean;
   media: MediaMeta;
+  /**
+   * True when the video is a round video note; absent when false.
+   */
   video_note?: boolean;
 }
 
 export interface CreateAgentInput {
+  /**
+   * Outlet the new agent is assigned to.
+   */
   outlet_id: string;
   /**
    * A phone number in E.164 format to request a WhatsApp linking code.
@@ -1234,8 +1667,7 @@ export interface CreateAgentInput {
 }
 
 export interface CreateAgentOutput {
-  agent?: Agent;
-  pairing?: AgentPairing;
+  agent: Agent;
 }
 
 export type CreateAgentOutputEnvelope = CreateAgentOutput & {
@@ -1247,11 +1679,17 @@ export interface CreateBroadcastInput {
   content: BroadcastContent;
   distribution?: BroadcastDistributionRequest;
   interval?: BroadcastInterval | null;
+  /**
+   * Broadcast name.
+   */
   name: string;
   /**
    * At most 30 days after the start; defaults to that at start.
    */
   not_after?: string | null;
+  /**
+   * Sending does not start before this time.
+   */
   not_before?: string | null;
   /**
    * Orders the broadcast's messages within the broadcast class.
@@ -1262,7 +1700,7 @@ export interface CreateBroadcastInput {
    * Up to 20 sender agents. Setting them, start and resume require
    * whatsapp.message.create on every sender.
    */
-  sender_agent_ids?: string[];
+  sender_agent_ids?: string[] | null;
   /**
    * Default 500, at most 2000.
    */
@@ -1540,7 +1978,7 @@ export interface CreateMessageInputVariant5 {
 }
 
 export interface CreateMessageOutput {
-  message?: Message;
+  message: Message;
 }
 
 export type CreateMessageOutputEnvelope = CreateMessageOutput & {
@@ -1548,12 +1986,27 @@ export type CreateMessageOutputEnvelope = CreateMessageOutput & {
 };
 
 export interface CreateMessageTemplateInput {
+  /**
+   * Free-text description, at most 255 characters.
+   */
   description?: string;
   locale: TemplateLocaleRequest;
+  /**
+   * Template name, at most 64 characters.
+   */
   name: string;
-  params: TemplateParam[];
+  /**
+   * The parameters each send supplies, at most 20.
+   */
+  params: TemplateParam[] | null;
+  /**
+   * IANA timezone that date and datetime values render in.
+   */
   timezone: string;
-  variants: TemplateVariantInput[];
+  /**
+   * The text variants, at most 20; at least one must be enabled.
+   */
+  variants: TemplateVariantInput[] | null;
 }
 
 export type CreateMessageType = "edit" | "reaction" | "revoke" | "template" | "text";
@@ -2076,7 +2529,7 @@ export interface DelegatedAccessUnsupportedProblem {
 }
 
 export interface DeleteAgentOutput {
-  deletion?: AgentDeletion;
+  deletion: AgentDeletion;
 }
 
 export type DeleteAgentOutputEnvelope = DeleteAgentOutput & {
@@ -2084,7 +2537,7 @@ export type DeleteAgentOutputEnvelope = DeleteAgentOutput & {
 };
 
 export interface FetchAgentOutput {
-  agent?: Agent;
+  agent: Agent;
 }
 
 export type FetchAgentOutputEnvelope = FetchAgentOutput & {
@@ -2092,7 +2545,7 @@ export type FetchAgentOutputEnvelope = FetchAgentOutput & {
 };
 
 export interface FetchAgentPairingOutput {
-  pairing?: AgentPairing;
+  pairing: AgentPairing;
 }
 
 export type FetchAgentPairingOutputEnvelope = FetchAgentPairingOutput & {
@@ -2100,7 +2553,7 @@ export type FetchAgentPairingOutputEnvelope = FetchAgentPairingOutput & {
 };
 
 export interface FetchAgentsOutput {
-  agents?: ListPageAgent;
+  agents: ListPageAgent;
 }
 
 export type FetchAgentsOutputEnvelope = FetchAgentsOutput & {
@@ -2108,7 +2561,7 @@ export type FetchAgentsOutputEnvelope = FetchAgentsOutput & {
 };
 
 export interface FetchBroadcastRecipientsOutput {
-  recipients?: ListPageBroadcastRecipient;
+  recipients: ListPageBroadcastRecipient;
 }
 
 export type FetchBroadcastRecipientsOutputEnvelope = FetchBroadcastRecipientsOutput & {
@@ -2116,7 +2569,7 @@ export type FetchBroadcastRecipientsOutputEnvelope = FetchBroadcastRecipientsOut
 };
 
 export interface FetchBroadcastSuppressionsOutput {
-  suppressions?: ListPageBroadcastSuppression;
+  suppressions: ListPageBroadcastSuppression;
 }
 
 export type FetchBroadcastSuppressionsOutputEnvelope = FetchBroadcastSuppressionsOutput & {
@@ -2124,7 +2577,7 @@ export type FetchBroadcastSuppressionsOutputEnvelope = FetchBroadcastSuppression
 };
 
 export interface FetchBroadcastsOutput {
-  broadcasts?: ListPageBroadcast;
+  broadcasts: ListPageBroadcast;
 }
 
 export type FetchBroadcastsOutputEnvelope = FetchBroadcastsOutput & {
@@ -2132,7 +2585,7 @@ export type FetchBroadcastsOutputEnvelope = FetchBroadcastsOutput & {
 };
 
 export interface FetchChatMessageOutput {
-  message?: ChatMessage;
+  message: ChatMessage;
 }
 
 export type FetchChatMessageOutputEnvelope = FetchChatMessageOutput & {
@@ -2140,7 +2593,7 @@ export type FetchChatMessageOutputEnvelope = FetchChatMessageOutput & {
 };
 
 export interface FetchChatMessagesOutput {
-  messages?: ListPageChatMessage;
+  messages: ListPageChatMessage;
 }
 
 export type FetchChatMessagesOutputEnvelope = FetchChatMessagesOutput & {
@@ -2148,7 +2601,7 @@ export type FetchChatMessagesOutputEnvelope = FetchChatMessagesOutput & {
 };
 
 export interface FetchChatOutput {
-  chat?: Chat;
+  chat: Chat;
 }
 
 export type FetchChatOutputEnvelope = FetchChatOutput & {
@@ -2156,7 +2609,7 @@ export type FetchChatOutputEnvelope = FetchChatOutput & {
 };
 
 export interface FetchChatsOutput {
-  chats?: ListPageChat;
+  chats: ListPageChat;
 }
 
 export type FetchChatsOutputEnvelope = FetchChatsOutput & {
@@ -2164,7 +2617,7 @@ export type FetchChatsOutputEnvelope = FetchChatsOutput & {
 };
 
 export interface FetchMessageOutput {
-  message?: Message;
+  message: Message;
 }
 
 export type FetchMessageOutputEnvelope = FetchMessageOutput & {
@@ -2172,7 +2625,7 @@ export type FetchMessageOutputEnvelope = FetchMessageOutput & {
 };
 
 export interface FetchMessageTemplatesOutput {
-  templates?: ListPageMessageTemplate;
+  templates: ListPageMessageTemplate;
 }
 
 export type FetchMessageTemplatesOutputEnvelope = FetchMessageTemplatesOutput & {
@@ -2180,7 +2633,7 @@ export type FetchMessageTemplatesOutputEnvelope = FetchMessageTemplatesOutput & 
 };
 
 export interface FetchMessagesOutput {
-  messages?: ListPageMessage;
+  messages: ListPageMessage;
 }
 
 export type FetchMessagesOutputEnvelope = FetchMessagesOutput & {
@@ -2299,7 +2752,7 @@ export interface InternalErrorProblem {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageAgent {
-  data: Array<Agent | null>;
+  data: Agent[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2314,7 +2767,7 @@ export interface ListPageAgent {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageBroadcast {
-  data: Array<Broadcast | null>;
+  data: Broadcast[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2329,7 +2782,7 @@ export interface ListPageBroadcast {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageBroadcastRecipient {
-  data: Array<BroadcastRecipient | null>;
+  data: BroadcastRecipient[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2344,7 +2797,7 @@ export interface ListPageBroadcastRecipient {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageBroadcastSuppression {
-  data: Array<BroadcastSuppression | null>;
+  data: BroadcastSuppression[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2359,7 +2812,7 @@ export interface ListPageBroadcastSuppression {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageChat {
-  data: Array<Chat | null>;
+  data: Chat[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2374,7 +2827,7 @@ export interface ListPageChat {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageChatMessage {
-  data: Array<ChatMessage | null>;
+  data: ChatMessage[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2389,7 +2842,7 @@ export interface ListPageChatMessage {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageMessage {
-  data: Array<Message | null>;
+  data: Message[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2404,7 +2857,7 @@ export interface ListPageMessage {
  * ListPage is one page of a list in either mode.
  */
 export interface ListPageMessageTemplate {
-  data: Array<MessageTemplate | null>;
+  data: MessageTemplate[];
   has_next_page: boolean;
   has_prev_page: boolean;
   next_cursor?: string;
@@ -2419,31 +2872,53 @@ export interface ListPageMessageTemplate {
  * MediaMeta describes a media file with metadata such as its size or MIME type.
  */
 export interface MediaMeta {
+  /**
+   * Duration in seconds of a video or audio file; absent when unknown.
+   */
   duration_seconds?: number;
+  /**
+   * The original file name; absent when the sender supplied none.
+   */
   file_name?: string;
+  /**
+   * Height in pixels of an image, video or sticker; absent when unknown.
+   */
   height?: number;
+  /**
+   * The MIME type, such as `image/jpeg`; absent when WhatsApp sent none.
+   */
   mimetype?: string;
   /**
-   * SHA-256 hash of the file before encryption, encoded as lowercase hex.
+   * SHA-256 hash of the file before encryption, encoded as lowercase hex;
+   * absent when unknown.
    */
   sha256?: string;
   /**
-   * File length in bytes before encryption.
+   * File length in bytes before encryption; absent when unknown.
    */
   size?: number;
+  /**
+   * Width in pixels of an image, video or sticker; absent when unknown.
+   */
   width?: number;
 }
 
 export interface Message {
+  /**
+   * The agent sending the message.
+   */
   agent_id: string;
   /**
    * The broadcast the message was sent for.
    */
   broadcast_id?: string;
+  /**
+   * When the message was accepted.
+   */
   create_at: string;
   /**
    * When the message was sent to WhatsApp (single tick); it does not
-   * confirm receipt by the recipient: see receipt.
+   * confirm receipt by the recipient: see receipt. Absent until sent.
    */
   delivered_at?: string;
   error?: MessageError;
@@ -2451,7 +2926,14 @@ export interface Message {
    * The agent's current phone number, which may differ from its number when the message was sent.
    */
   from?: string;
+  /**
+   * Message ID.
+   */
   id: string;
+  /**
+   * Whether the message text is withheld from this response.
+   */
+  is_redacted: boolean;
   /**
    * The service stops trying to send the message after this time.
    */
@@ -2460,13 +2942,23 @@ export interface Message {
    * The message is not sent before this time.
    */
   not_before?: string;
+  /**
+   * Organization of the sending agent; absent when the agent is hidden.
+   */
   organization_id?: string;
   priority?: SendPriorityClass;
+  /**
+   * Priority offset within the class the message was accepted with.
+   */
   priority_offset: number;
   reaction?: MessageReactionEmoji;
   receipt?: MessageReceipt;
   /**
-   * Whether the message text is withheld from this response.
+   * Whether the message text is withheld from this response; equals is_redacted.
+   *
+   * Deprecated: use `is_redacted` instead.
+   *
+   * @deprecated
    */
   redacted?: boolean;
   /**
@@ -2487,6 +2979,9 @@ export interface Message {
    */
   to?: string;
   type: MessageKind;
+  /**
+   * When the message last changed.
+   */
   update_at: string;
 }
 
@@ -2495,12 +2990,24 @@ export interface Message {
  * within 20 minutes of its send.
  */
 export interface MessageEdit {
+  /**
+   * The new message text.
+   */
   body: string;
+  /**
+   * The chat message to edit.
+   */
   target_id: string;
 }
 
 export interface MessageError {
+  /**
+   * Stable failure code.
+   */
   code: string;
+  /**
+   * Human-readable failure description.
+   */
   detail: string;
 }
 
@@ -2512,6 +3019,9 @@ export interface MessageError {
 export interface MessageKey {
   chat: ChatRef;
   sender: Party;
+  /**
+   * The WhatsApp message ID, not a UUID.
+   */
   wid: string;
 }
 
@@ -2523,6 +3033,9 @@ export type MessageKind = "audio" | "contact" | "document" | "edit" | "image" | 
 
 export interface MessageOperationNotAllowedDetails {
   reason: MessageOperationRefusal;
+  /**
+   * The chat message the operation names.
+   */
   target_id: string;
 }
 
@@ -2562,9 +3075,21 @@ export interface MessageReactionEmoji {
  * are best effort: a recipient with read receipts off never reports read.
  */
 export interface MessageReceipt {
+  /**
+   * When the recipient's device reported delivery.
+   */
   delivered_at?: string;
+  /**
+   * When the recipient played a voice or video note.
+   */
   played_at?: string;
+  /**
+   * When the recipient reported reading it.
+   */
   read_at?: string;
+  /**
+   * When WhatsApp accepted the message.
+   */
   sent_at?: string;
   status: MessageReceiptStatus;
 }
@@ -2579,6 +3104,9 @@ export type MessageReceiptStatus = "delivered" | "pending" | "played" | "read" |
  * within 48 hours of its send.
  */
 export interface MessageRevoke {
+  /**
+   * The chat message to delete for everyone.
+   */
   target_id: string;
 }
 
@@ -2603,20 +3131,47 @@ export interface MessageTargetDetails {
 }
 
 export interface MessageTemplate {
+  /**
+   * When the template was created.
+   */
   create_at: string;
+  /**
+   * Free-text description; empty when none.
+   */
   description: string;
+  /**
+   * Template ID.
+   */
   id: string;
   locale: TemplateLocale;
+  /**
+   * Template name.
+   */
   name: string;
+  /**
+   * Organization that owns the template.
+   */
   organization_id: string;
+  /**
+   * The parameters each send supplies.
+   */
   params: TemplateParamOutput[];
+  /**
+   * IANA timezone that date and datetime values render in.
+   */
   timezone: string;
+  /**
+   * When the template was last changed.
+   */
   update_at: string;
+  /**
+   * The text variants; each send uses one enabled variant.
+   */
   variants: TemplateVariant[];
 }
 
 export interface MessageTemplateOutput {
-  template?: MessageTemplate;
+  template: MessageTemplate;
 }
 
 export type MessageTemplateOutputEnvelope = MessageTemplateOutput & {
@@ -2624,15 +3179,27 @@ export type MessageTemplateOutputEnvelope = MessageTemplateOutput & {
 };
 
 export interface MessageTemplateReference {
+  /**
+   * The message template rendered.
+   */
   id: string;
+  /**
+   * The template variant sent.
+   */
   variant_id: string;
 }
 
 export interface MessageText {
+  /**
+   * The message text.
+   */
   body: string;
 }
 
 export interface MessageTextOutput {
+  /**
+   * The message text.
+   */
   body: string;
 }
 
@@ -2733,8 +3300,20 @@ export type PaginationParamsReason = "offset_too_large" | "selector_conflict" | 
  * `self` marks the receiving account itself.
  */
 export interface Party {
+  /**
+   * The user's LID JID (`<digits>@lid` or `<digits>@hosted.lid`); absent
+   * when unknown. At least one of `lid` and `phone` is present.
+   */
   lid?: string;
+  /**
+   * The user's phone JID (`<digits>@s.whatsapp.net`, `@hosted` or
+   * `@bot`); absent when unknown.
+   */
   phone?: string;
+  /**
+   * True when the party is the receiving account itself; absent when
+   * false.
+   */
   self?: boolean;
 }
 
@@ -2751,7 +3330,7 @@ export interface PollChatMessagesOutput {
    * New, changed and merged messages in revision order; a merged copy is
    * a tombstone (id, rev, merged_into_id).
    */
-  messages: Array<ChatMessage | null>;
+  messages: ChatMessage[];
 }
 
 export type PollChatMessagesOutputEnvelope = PollChatMessagesOutput & {
@@ -2785,11 +3364,44 @@ export interface PreconditionFailedProblem {
   type: "https://docs.gatherdeal.ai/errors/PRECONDITION_FAILED";
 }
 
+/**
+ * PRECONDITION_REQUIRED (428): This request must be conditional. Send If-Match with the revision from the latest read.
+ */
+export interface PreconditionRequiredProblem {
+  code: "PRECONDITION_REQUIRED";
+  correlation_id?: string;
+  /**
+   * Localized instance-specific text.
+   */
+  detail?: string;
+  /**
+   * urn:gatherdeal:request:<correlation_id>
+   */
+  instance?: string;
+  record?: ProblemRecord;
+  retryable: false;
+  status: 428;
+  /**
+   * Localized by Accept-Language; English: "This request must be conditional. Send If-Match with the revision from the latest read."
+   */
+  title: string;
+  /**
+   * Problem type URI, one-to-one with code; documentation only, never dereferenced at runtime.
+   */
+  type: "https://docs.gatherdeal.ai/errors/PRECONDITION_REQUIRED";
+}
+
 export interface PreviewMessageTemplateInput {
-  params: Record<string, TemplateDateValue | TemplateDatetimeValue | TemplateMoneyValue | TemplateTextValue>;
+  /**
+   * A value for every template parameter, by parameter name.
+   */
+  params: Record<string, TemplateDateValue | TemplateDatetimeValue | TemplateMoneyValue | TemplateTextValue> | null;
 }
 
 export interface PreviewMessageTemplateOutput {
+  /**
+   * Every variant rendered with the given values.
+   */
   variants: RenderedTemplateVariant[];
 }
 
@@ -2871,15 +3483,69 @@ export interface ProblemViolationParams {
 export type ProblemViolationRule = "enum" | "format" | "invalid" | "max" | "max_items" | "max_length" | "min" | "min_items" | "min_length" | "pattern" | "required" | "type" | "unique" | "unknown_field" | (string & {});
 
 export interface RenderedTemplateVariant {
-  enabled: boolean;
-  length: number;
-  text: string;
+  /**
+   * Whether the variant is used for sends.
+   */
+  is_enabled: boolean;
   /**
    * Whether the rendered variant exceeds the message length limit, even
    * when the variant is disabled.
    */
-  too_long: boolean;
+  is_too_long: boolean;
+  /**
+   * Length of the rendered text, in characters.
+   */
+  length: number;
+  /**
+   * The rendered message text.
+   */
+  text: string;
+  /**
+   * The template variant rendered.
+   */
   variant_id: string;
+}
+
+export interface ReplaceMessageTemplateInput {
+  /**
+   * Free-text description, at most 255 characters.
+   */
+  description?: string;
+  locale: TemplateLocaleRequest;
+  /**
+   * Template name, at most 64 characters.
+   */
+  name: string;
+  /**
+   * The parameters each send supplies, at most 20.
+   */
+  params: TemplateParam[] | null;
+  /**
+   * IANA timezone that date and datetime values render in.
+   */
+  timezone: string;
+  /**
+   * The complete set of text variants, at most 20; at least one must be
+   * enabled. Variants absent from the list are removed.
+   */
+  variants: ReplaceTemplateVariantInput[] | null;
+}
+
+export interface ReplaceTemplateVariantInput {
+  /**
+   * The variant's ID: an existing variant's ID keeps that variant; a new
+   * UUID you generate adds one. IDs of another template's variants are
+   * rejected.
+   */
+  id: string;
+  /**
+   * Whether the variant is used for sends.
+   */
+  is_enabled: boolean;
+  /**
+   * Variant text with {{name}} parameter placeholders.
+   */
+  text: string;
 }
 
 export type RunCapacityState = "admitted" | "queued" | "released" | "running" | "starting" | (string & {});
@@ -2890,8 +3556,14 @@ export type RunCapacityState = "admitted" | "queued" | "released" | "running" | 
 export type SendMessageStrategy = "only_lid" | "only_phone" | "prefer_lid" | "prefer_phone";
 
 export interface SendMessageTemplate {
+  /**
+   * The message template to render.
+   */
   id: string;
-  params: Record<string, TemplateDateValue | TemplateDatetimeValue | TemplateMoneyValue | TemplateTextValue>;
+  /**
+   * A value for every template parameter, by parameter name.
+   */
+  params: Record<string, TemplateDateValue | TemplateDatetimeValue | TemplateMoneyValue | TemplateTextValue> | null;
 }
 
 /**
@@ -2900,7 +3572,15 @@ export interface SendMessageTemplate {
  * chosen delay in milliseconds. Set both to zero to disable spacing.
  */
 export interface SendPacingOutput {
+  /**
+   * The longest delay between the starts of consecutive sends, in
+   * milliseconds, at most 600000 (10 minutes).
+   */
   max_interval_ms: number;
+  /**
+   * The shortest delay between the starts of consecutive sends, in
+   * milliseconds; at most `max_interval_ms`.
+   */
   min_interval_ms: number;
 }
 
@@ -2922,10 +3602,10 @@ export type SendPriorityClassRequest = "background" | "broadcast" | "critical" |
  */
 export interface SendWindow {
   /**
-   * Weekdays on which the window opens, unique; empty means every day.
-   * A window that wraps past midnight belongs to the day it opens.
+   * Weekdays on which the window opens, unique; absent or empty means
+   * every day. A window that wraps past midnight belongs to the day it opens.
    */
-  days?: WeekdayRequest[];
+  days?: WeekdayRequest[] | null;
   /**
    * Opening time, "HH:MM" 24-hour, local to timezone.
    */
@@ -2946,8 +3626,8 @@ export interface SendWindow {
  */
 export interface SendWindowOutput {
   /**
-   * Weekdays on which the window opens, unique; empty means every day.
-   * A window that wraps past midnight belongs to the day it opens.
+   * Weekdays on which the window opens, unique; absent or empty means
+   * every day. A window that wraps past midnight belongs to the day it opens.
    */
   days?: Weekday[];
   /**
@@ -2965,26 +3645,41 @@ export interface SendWindowOutput {
 }
 
 export interface TemplateDateValue {
+  /**
+   * Calendar date, YYYY-MM-DD.
+   */
   date: string;
   kind: "date";
 }
 
 export interface TemplateDateValueOutput {
+  /**
+   * Calendar date, YYYY-MM-DD.
+   */
   date: string;
   kind: "date";
 }
 
 export interface TemplateDatetimeValue {
+  /**
+   * RFC 3339 instant, rendered in the template's timezone.
+   */
   datetime: string;
   kind: "datetime";
 }
 
 export interface TemplateDatetimeValueOutput {
+  /**
+   * RFC 3339 instant, rendered in the template's timezone.
+   */
   datetime: string;
   kind: "datetime";
 }
 
 export interface TemplateLimitReachedDetails {
+  /**
+   * Maximum message templates allowed for the organization.
+   */
   limit: number;
 }
 
@@ -2993,24 +3688,42 @@ export type TemplateLocale = "en" | "ms" | "zh-Hans" | "zh-Hant" | (string & {})
 export type TemplateLocaleRequest = "en" | "ms" | "zh-Hans" | "zh-Hant";
 
 export interface TemplateMoneyValue {
+  /**
+   * Decimal amount.
+   */
   amount: string;
+  /**
+   * ISO 4217 currency code.
+   */
   currency: string;
   kind: "money";
 }
 
 export interface TemplateMoneyValueOutput {
+  /**
+   * Decimal amount.
+   */
   amount: string;
+  /**
+   * ISO 4217 currency code.
+   */
   currency: string;
   kind: "money";
 }
 
 export interface TemplateNotFoundDetails {
+  /**
+   * The message template that was not found.
+   */
   template_id: string;
 }
 
 export interface TemplateParam {
-  kind?: TemplateParamKindRequest;
-  name?: string;
+  kind: TemplateParamKindRequest;
+  /**
+   * Parameter name, referenced as {{name}} in variant texts.
+   */
+  name: string;
 }
 
 export type TemplateParamKind = "date" | "datetime" | "money" | "text" | (string & {});
@@ -3019,34 +3732,74 @@ export type TemplateParamKindRequest = "date" | "datetime" | "money" | "text";
 
 export interface TemplateParamOutput {
   kind: TemplateParamKind;
+  /**
+   * Parameter name, referenced as {{name}} in variant texts.
+   */
   name: string;
 }
 
 export interface TemplateRenderedTooLongDetails {
+  /**
+   * Length of the rendered text.
+   */
   length: number;
+  /**
+   * Maximum message length.
+   */
   limit: number;
+  /**
+   * The variant whose rendered text is too long.
+   */
   variant_id: string;
 }
 
 export interface TemplateTextValue {
   kind: "text";
+  /**
+   * The text to insert.
+   */
   text: string;
 }
 
 export interface TemplateTextValueOutput {
   kind: "text";
+  /**
+   * The text to insert.
+   */
   text: string;
 }
 
+/**
+ * TemplateVariant is one text variant of a message template.
+ */
 export interface TemplateVariant {
-  enabled: boolean;
+  /**
+   * Variant ID.
+   */
   id: string;
+  /**
+   * Whether the variant is used for sends.
+   */
+  is_enabled: boolean;
+  /**
+   * Variant text with {{name}} parameter placeholders.
+   */
   text: string;
 }
 
 export interface TemplateVariantInput {
-  enabled: boolean;
+  /**
+   * The variant's ID, a UUID unique among the organization's template
+   * variants; omit it to have one assigned.
+   */
   id?: string | null;
+  /**
+   * Whether the variant is used for sends.
+   */
+  is_enabled: boolean;
+  /**
+   * Variant text with {{name}} parameter placeholders.
+   */
   text: string;
 }
 
@@ -3114,15 +3867,14 @@ export interface UnavailableProblem {
 }
 
 export interface UpdateAgentInput {
-  outlet_id?: string | null;
   /**
-   * The last-read update_at value at millisecond precision.
+   * Outlet to assign the agent to; null removes the assignment.
    */
-  revision?: string;
+  outlet_id?: string | null;
 }
 
 export interface UpdateAgentOutput {
-  agent?: Agent;
+  agent: Agent;
 }
 
 export type UpdateAgentOutputEnvelope = UpdateAgentOutput & {
@@ -3134,22 +3886,31 @@ export interface UpdateBroadcastInput {
   content?: BroadcastContent;
   distribution?: BroadcastDistributionRequest;
   interval?: BroadcastInterval;
+  /**
+   * New broadcast name.
+   */
   name?: string;
+  /**
+   * Recipients not sent by then expire, at most 30 days after the start; null restores the default.
+   */
   not_after?: string | null;
+  /**
+   * Sending does not start before this time; null removes it.
+   */
   not_before?: string | null;
+  /**
+   * Orders the broadcast's messages within the broadcast class, -2 to 2.
+   */
   priority_offset?: number;
   send_window?: SendWindow | null;
-  sender_agent_ids?: string[];
+  /**
+   * New sender agents, up to 20; replaces the list. Requires whatsapp.message.create on every sender.
+   */
+  sender_agent_ids?: string[] | null;
+  /**
+   * The most broadcast messages each sender sends in a rolling 24 hours, at most 2000.
+   */
   sender_daily_limit?: number;
-}
-
-export interface UpdateMessageTemplateInput {
-  description?: string;
-  locale: TemplateLocaleRequest;
-  name: string;
-  params: TemplateParam[];
-  timezone: string;
-  variants: TemplateVariantInput[];
 }
 
 /**

@@ -12,7 +12,6 @@ export type ContactLogsCreateInput = {
 export type ContactLogsCreateOutput = T.KeyedAcknowledgmentEnvelope;
 export type ContactLogsCreateErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_CONTACT_LOG_NOT_FOUND"
@@ -41,21 +40,20 @@ export type ContactLogsCreateErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactLogsCreate: Operation<ContactLogsCreateInput, ContactLogsCreateOutput, ContactLogsCreateErrorCode> = {
+export const contactLogsCreate = {
   id: "crm.contact_logs.create",
   method: "POST",
   path: "/v1/contact-logs",
   parameters: [
     { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
   ],
-  success: { status: 200, body: "json", required: ["id", "status"] },
+  success: { status: 201, body: "json", required: ["id", "status"] },
   body: "required",
   idempotency: "keyed",
   authentication: "required",
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_CONTACT_LOG_NOT_FOUND",
@@ -85,19 +83,20 @@ export const contactLogsCreate: Operation<ContactLogsCreateInput, ContactLogsCre
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactLogsCreateInput; readonly output: ContactLogsCreateOutput },
+} as const satisfies Operation<ContactLogsCreateInput, ContactLogsCreateOutput, ContactLogsCreateErrorCode>;
 
 export type ContactLogsListInput = {
   /**
    * Page number (1-based). Selects page mode; mutually exclusive with after
    * and before.
    */
-  p?: number;
+  page?: number;
   /**
    * Items per page. Defaults to 20, max 100 (larger values are clamped and
    * echoed as page_size).
    */
-  count?: number;
+  limit?: number;
   /**
    * Opaque cursor: the page after this position. Pass a previous response's
    * next_cursor.
@@ -114,13 +113,10 @@ export type ContactLogsListInput = {
    */
   total?: T.TotalMode;
   /**
-   * Field name to sort by (e.g., "created_at", "name").
+   * Comma-separated sort fields, e.g. "name" or "-create_at,name". Each field
+   * sorts ascending unless prefixed with "-" for descending.
    */
-  s?: string;
-  /**
-   * Sort direction: "asc" or "desc". Defaults to "desc".
-   */
-  o?: "asc" | "desc";
+  sort?: string;
   /**
    * Filter is the client-supplied filter group. Query and form parameters
    * use unpadded base64url-encoded JSON; JSON bodies use an object.
@@ -142,7 +138,6 @@ export type ContactLogsListInput = {
 export type ContactLogsListOutput = T.FetchContactLogsOutputEnvelope;
 export type ContactLogsListErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
   | "DELEGATED_ACCESS_CREDENTIAL_LOCATION"
@@ -167,18 +162,17 @@ export type ContactLogsListErrorCode =
   | "PAGINATION_PARAMS_INVALID"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactLogsList: Operation<ContactLogsListInput, ContactLogsListOutput, ContactLogsListErrorCode> = {
+export const contactLogsList = {
   id: "crm.contact_logs.list",
   method: "GET",
   path: "/v1/contact-logs",
   parameters: [
-    { member: "p", name: "p", in: "query", required: false, encoding: "scalar" },
-    { member: "count", name: "count", in: "query", required: false, encoding: "scalar" },
+    { member: "page", name: "page", in: "query", required: false, encoding: "scalar" },
+    { member: "limit", name: "limit", in: "query", required: false, encoding: "scalar" },
     { member: "after", name: "after", in: "query", required: false, encoding: "scalar" },
     { member: "before", name: "before", in: "query", required: false, encoding: "scalar" },
     { member: "total", name: "total", in: "query", required: false, encoding: "scalar" },
-    { member: "s", name: "s", in: "query", required: false, encoding: "scalar" },
-    { member: "o", name: "o", in: "query", required: false, encoding: "scalar" },
+    { member: "sort", name: "sort", in: "query", required: false, encoding: "scalar" },
     { member: "filter", name: "filter", in: "query", required: false, encoding: "base64url-json" },
     { member: "contact_id", name: "contact_id", in: "query", required: true, encoding: "scalar" },
     { member: "q", name: "q", in: "query", required: false, encoding: "scalar" },
@@ -190,8 +184,8 @@ export const contactLogsList: Operation<ContactLogsListInput, ContactLogsListOut
   authentication: "required",
   organizationKeys: true,
   pagination: {
-    pageParam: "p",
-    pageSizeParam: "count",
+    pageParam: "page",
+    pageSizeParam: "limit",
     afterParam: "after",
     beforeParam: "before",
     totalParam: "total",
@@ -211,7 +205,6 @@ export const contactLogsList: Operation<ContactLogsListInput, ContactLogsListOut
   },
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
     "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
@@ -237,7 +230,8 @@ export const contactLogsList: Operation<ContactLogsListInput, ContactLogsListOut
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactLogsListInput; readonly output: ContactLogsListOutput },
+} as const satisfies Operation<ContactLogsListInput, ContactLogsListOutput, ContactLogsListErrorCode>;
 
 export type ContactTagsAssignInput = {
   /**
@@ -253,10 +247,9 @@ export type ContactTagsAssignInput = {
    */
   outlet_id?: string;
 };
-export type ContactTagsAssignOutput = T.KeyedAcknowledgmentEnvelope;
+export type ContactTagsAssignOutput = void;
 export type ContactTagsAssignErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_CONTACT_NOT_FOUND"
@@ -279,12 +272,10 @@ export type ContactTagsAssignErrorCode =
   | "DELEGATED_ACCESS_TARGET_MISMATCH"
   | "DELEGATED_ACCESS_UNSUPPORTED"
   | "FORBIDDEN"
-  | "IDEMPOTENCY_KEY_CONFLICT"
-  | "IDEMPOTENCY_KEY_REQUIRED"
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactTagsAssign: Operation<ContactTagsAssignInput, ContactTagsAssignOutput, ContactTagsAssignErrorCode> = {
+export const contactTagsAssign = {
   id: "crm.contact_tags.assign",
   method: "PUT",
   path: "/v1/contacts/{contact_id}/tags/{tag_id}",
@@ -293,14 +284,13 @@ export const contactTagsAssign: Operation<ContactTagsAssignInput, ContactTagsAss
     { member: "tag_id", name: "tag_id", in: "path", required: true, encoding: "scalar" },
     { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
   ],
-  success: { status: 200, body: "json", required: ["id", "status"] },
+  success: { status: 204, body: "none", required: [] },
   body: "none",
-  idempotency: "keyed",
+  idempotency: "safe",
   authentication: "required",
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_CONTACT_NOT_FOUND",
@@ -323,25 +313,24 @@ export const contactTagsAssign: Operation<ContactTagsAssignInput, ContactTagsAss
     "DELEGATED_ACCESS_TARGET_MISMATCH",
     "DELEGATED_ACCESS_UNSUPPORTED",
     "FORBIDDEN",
-    "IDEMPOTENCY_KEY_CONFLICT",
-    "IDEMPOTENCY_KEY_REQUIRED",
     "INTERNAL_ERROR",
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactTagsAssignInput; readonly output: ContactTagsAssignOutput },
+} as const satisfies Operation<ContactTagsAssignInput, ContactTagsAssignOutput, ContactTagsAssignErrorCode>;
 
 export type ContactTagsListInput = {
   /**
    * Page number (1-based). Selects page mode; mutually exclusive with after
    * and before.
    */
-  p?: number;
+  page?: number;
   /**
    * Items per page. Defaults to 20, max 100 (larger values are clamped and
    * echoed as page_size).
    */
-  count?: number;
+  limit?: number;
   /**
    * Opaque cursor: the page after this position. Pass a previous response's
    * next_cursor.
@@ -362,13 +351,10 @@ export type ContactTagsListInput = {
    */
   q?: string;
   /**
-   * Field name to sort by (e.g., "created_at", "name").
+   * Comma-separated sort fields, e.g. "name" or "-create_at,name". Each field
+   * sorts ascending unless prefixed with "-" for descending.
    */
-  s?: string;
-  /**
-   * Sort direction: "asc" or "desc". Defaults to "desc".
-   */
-  o?: "asc" | "desc";
+  sort?: string;
   /**
    * Filter is the client-supplied filter group. Query and form parameters
    * use unpadded base64url-encoded JSON; JSON bodies use an object.
@@ -378,7 +364,6 @@ export type ContactTagsListInput = {
 export type ContactTagsListOutput = T.FetchContactTagsOutputEnvelope;
 export type ContactTagsListErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
   | "DELEGATED_ACCESS_CREDENTIAL_LOCATION"
@@ -403,19 +388,18 @@ export type ContactTagsListErrorCode =
   | "PAGINATION_PARAMS_INVALID"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactTagsList: Operation<ContactTagsListInput, ContactTagsListOutput, ContactTagsListErrorCode> = {
+export const contactTagsList = {
   id: "crm.contact_tags.list",
   method: "GET",
   path: "/v1/contact-tags",
   parameters: [
-    { member: "p", name: "p", in: "query", required: false, encoding: "scalar" },
-    { member: "count", name: "count", in: "query", required: false, encoding: "scalar" },
+    { member: "page", name: "page", in: "query", required: false, encoding: "scalar" },
+    { member: "limit", name: "limit", in: "query", required: false, encoding: "scalar" },
     { member: "after", name: "after", in: "query", required: false, encoding: "scalar" },
     { member: "before", name: "before", in: "query", required: false, encoding: "scalar" },
     { member: "total", name: "total", in: "query", required: false, encoding: "scalar" },
     { member: "q", name: "q", in: "query", required: false, encoding: "scalar" },
-    { member: "s", name: "s", in: "query", required: false, encoding: "scalar" },
-    { member: "o", name: "o", in: "query", required: false, encoding: "scalar" },
+    { member: "sort", name: "sort", in: "query", required: false, encoding: "scalar" },
     { member: "filter", name: "filter", in: "query", required: false, encoding: "base64url-json" },
   ],
   success: { status: 200, body: "json", required: ["status", "tags"] },
@@ -424,8 +408,8 @@ export const contactTagsList: Operation<ContactTagsListInput, ContactTagsListOut
   authentication: "required",
   organizationKeys: true,
   pagination: {
-    pageParam: "p",
-    pageSizeParam: "count",
+    pageParam: "page",
+    pageSizeParam: "limit",
     afterParam: "after",
     beforeParam: "before",
     totalParam: "total",
@@ -445,7 +429,6 @@ export const contactTagsList: Operation<ContactTagsListInput, ContactTagsListOut
   },
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
     "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
@@ -471,7 +454,8 @@ export const contactTagsList: Operation<ContactTagsListInput, ContactTagsListOut
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactTagsListInput; readonly output: ContactTagsListOutput },
+} as const satisfies Operation<ContactTagsListInput, ContactTagsListOutput, ContactTagsListErrorCode>;
 
 export type ContactTagsRemoveInput = {
   /**
@@ -490,7 +474,6 @@ export type ContactTagsRemoveInput = {
 export type ContactTagsRemoveOutput = void;
 export type ContactTagsRemoveErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_CONTACT_NOT_FOUND"
@@ -516,7 +499,7 @@ export type ContactTagsRemoveErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactTagsRemove: Operation<ContactTagsRemoveInput, ContactTagsRemoveOutput, ContactTagsRemoveErrorCode> = {
+export const contactTagsRemove = {
   id: "crm.contact_tags.remove",
   method: "DELETE",
   path: "/v1/contacts/{contact_id}/tags/{tag_id}",
@@ -532,7 +515,6 @@ export const contactTagsRemove: Operation<ContactTagsRemoveInput, ContactTagsRem
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_CONTACT_NOT_FOUND",
@@ -559,7 +541,8 @@ export const contactTagsRemove: Operation<ContactTagsRemoveInput, ContactTagsRem
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactTagsRemoveInput; readonly output: ContactTagsRemoveOutput },
+} as const satisfies Operation<ContactTagsRemoveInput, ContactTagsRemoveOutput, ContactTagsRemoveErrorCode>;
 
 export type ContactsCreateInput = {
   /**
@@ -570,7 +553,6 @@ export type ContactsCreateInput = {
 export type ContactsCreateOutput = T.KeyedAcknowledgmentEnvelope;
 export type ContactsCreateErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_CONTACT_EMAIL_OCCUPIED"
@@ -601,21 +583,20 @@ export type ContactsCreateErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactsCreate: Operation<ContactsCreateInput, ContactsCreateOutput, ContactsCreateErrorCode> = {
+export const contactsCreate = {
   id: "crm.contacts.create",
   method: "POST",
   path: "/v1/contacts",
   parameters: [
     { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
   ],
-  success: { status: 200, body: "json", required: ["id", "status"] },
+  success: { status: 201, body: "json", required: ["id", "status"] },
   body: "required",
   idempotency: "keyed",
   authentication: "required",
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_CONTACT_EMAIL_OCCUPIED",
@@ -647,7 +628,8 @@ export const contactsCreate: Operation<ContactsCreateInput, ContactsCreateOutput
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactsCreateInput; readonly output: ContactsCreateOutput },
+} as const satisfies Operation<ContactsCreateInput, ContactsCreateOutput, ContactsCreateErrorCode>;
 
 export type ContactsGetInput = {
   /**
@@ -678,7 +660,6 @@ export type ContactsGetInput = {
 export type ContactsGetOutput = T.FetchContactByIDOutputEnvelope;
 export type ContactsGetErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CRM_CONTACT_EXPANSION_LIMIT"
   | "CRM_CONTACT_NOT_FOUND"
@@ -703,7 +684,7 @@ export type ContactsGetErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactsGet: Operation<ContactsGetInput, ContactsGetOutput, ContactsGetErrorCode> = {
+export const contactsGet = {
   id: "crm.contacts.get",
   method: "GET",
   path: "/v1/contacts/{id}",
@@ -722,7 +703,6 @@ export const contactsGet: Operation<ContactsGetInput, ContactsGetOutput, Contact
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CRM_CONTACT_EXPANSION_LIMIT",
     "CRM_CONTACT_NOT_FOUND",
@@ -748,7 +728,8 @@ export const contactsGet: Operation<ContactsGetInput, ContactsGetOutput, Contact
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactsGetInput; readonly output: ContactsGetOutput },
+} as const satisfies Operation<ContactsGetInput, ContactsGetOutput, ContactsGetErrorCode>;
 
 export type ContactsListInput = {
   /**
@@ -800,13 +781,10 @@ export type ContactsListInput = {
    */
   q?: string;
   /**
-   * Field name to sort by (e.g., "created_at", "name").
+   * Comma-separated sort fields, e.g. "name" or "-create_at,name". Each field
+   * sorts ascending unless prefixed with "-" for descending.
    */
-  s?: string;
-  /**
-   * Sort direction: "asc" or "desc". Defaults to "desc".
-   */
-  o?: "asc" | "desc";
+  sort?: string;
   /**
    * Filter is the client-supplied filter group. Query and form parameters
    * use unpadded base64url-encoded JSON; JSON bodies use an object.
@@ -824,12 +802,12 @@ export type ContactsListInput = {
    * Page number (1-based). Selects page mode; mutually exclusive with after
    * and before.
    */
-  p?: number;
+  page?: number;
   /**
    * Items per page. Defaults to 20, max 100 (larger values are clamped and
    * echoed as page_size).
    */
-  count?: number;
+  limit?: number;
   /**
    * Opaque cursor: the page after this position. Pass a previous response's
    * next_cursor.
@@ -869,7 +847,6 @@ export type ContactsListInput = {
 export type ContactsListOutput = T.FetchContactsOutputEnvelope;
 export type ContactsListErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CRM_CONTACT_EXPANSION_LIMIT"
   | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
@@ -895,7 +872,7 @@ export type ContactsListErrorCode =
   | "PAGINATION_PARAMS_INVALID"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactsList: Operation<ContactsListInput, ContactsListOutput, ContactsListErrorCode> = {
+export const contactsList = {
   id: "crm.contacts.list",
   method: "GET",
   path: "/v1/contacts",
@@ -912,13 +889,12 @@ export const contactsList: Operation<ContactsListInput, ContactsListOutput, Cont
     { member: "tag_id", name: "tag_id", in: "query", required: false, encoding: "repeated" },
     { member: "tag_id_conjunction", name: "tag_id_conjunction", in: "query", required: false, encoding: "scalar" },
     { member: "q", name: "q", in: "query", required: false, encoding: "scalar" },
-    { member: "s", name: "s", in: "query", required: false, encoding: "scalar" },
-    { member: "o", name: "o", in: "query", required: false, encoding: "scalar" },
+    { member: "sort", name: "sort", in: "query", required: false, encoding: "scalar" },
     { member: "filter", name: "filter", in: "query", required: false, encoding: "base64url-json" },
     { member: "start_at", name: "start_at", in: "query", required: false, encoding: "scalar" },
     { member: "end_at", name: "end_at", in: "query", required: false, encoding: "scalar" },
-    { member: "p", name: "p", in: "query", required: false, encoding: "scalar" },
-    { member: "count", name: "count", in: "query", required: false, encoding: "scalar" },
+    { member: "page", name: "page", in: "query", required: false, encoding: "scalar" },
+    { member: "limit", name: "limit", in: "query", required: false, encoding: "scalar" },
     { member: "after", name: "after", in: "query", required: false, encoding: "scalar" },
     { member: "before", name: "before", in: "query", required: false, encoding: "scalar" },
     { member: "total", name: "total", in: "query", required: false, encoding: "scalar" },
@@ -934,8 +910,8 @@ export const contactsList: Operation<ContactsListInput, ContactsListOutput, Cont
   authentication: "required",
   organizationKeys: true,
   pagination: {
-    pageParam: "p",
-    pageSizeParam: "count",
+    pageParam: "page",
+    pageSizeParam: "limit",
     afterParam: "after",
     beforeParam: "before",
     totalParam: "total",
@@ -955,7 +931,6 @@ export const contactsList: Operation<ContactsListInput, ContactsListOutput, Cont
   },
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CRM_CONTACT_EXPANSION_LIMIT",
     "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
@@ -982,7 +957,8 @@ export const contactsList: Operation<ContactsListInput, ContactsListOutput, Cont
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactsListInput; readonly output: ContactsListOutput },
+} as const satisfies Operation<ContactsListInput, ContactsListOutput, ContactsListErrorCode>;
 
 export type ContactsUpdateInput = {
   /**
@@ -997,7 +973,6 @@ export type ContactsUpdateInput = {
 export type ContactsUpdateOutput = void;
 export type ContactsUpdateErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_CONTACT_CHILD_KIND_MISMATCH"
@@ -1030,7 +1005,7 @@ export type ContactsUpdateErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactsUpdate: Operation<ContactsUpdateInput, ContactsUpdateOutput, ContactsUpdateErrorCode> = {
+export const contactsUpdate = {
   id: "crm.contacts.update",
   method: "PATCH",
   path: "/v1/contacts/{id}",
@@ -1045,7 +1020,6 @@ export const contactsUpdate: Operation<ContactsUpdateInput, ContactsUpdateOutput
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_CONTACT_CHILD_KIND_MISMATCH",
@@ -1079,7 +1053,98 @@ export const contactsUpdate: Operation<ContactsUpdateInput, ContactsUpdateOutput
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: ContactsUpdateInput; readonly output: ContactsUpdateOutput },
+} as const satisfies Operation<ContactsUpdateInput, ContactsUpdateOutput, ContactsUpdateErrorCode>;
+
+export type DealFieldsUpdateInput = {
+  /**
+   * Pass `if_match` as the revision at `/deal/revision` in the result of `crm.deals.get`, unchanged. A stale revision fails with `PRECONDITION_FAILED`: read again, reapply the change, and retry.
+   */
+  if_match: string;
+  /**
+   * Deal identifier.
+   */
+  id: string;
+  /**
+   * Outlet the request acts in. It must be an outlet the credential may use; omit it to use every such outlet.
+   */
+  outlet_id?: string;
+} & T.UpdateDealFieldsInput;
+export type DealFieldsUpdateOutput = T.DealRevisionOutputEnvelope;
+export type DealFieldsUpdateErrorCode = 
+  | "BAD_REQUEST"
+  | "CLIENT_UPGRADE_REQUIRED"
+  | "CONFLICT"
+  | "CRM_SALES_PIPELINE_DEAL_NOT_FOUND"
+  | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
+  | "DELEGATED_ACCESS_CREDENTIAL_LOCATION"
+  | "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED"
+  | "DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED"
+  | "DELEGATED_ACCESS_FEATURE_NOT_ENTITLED"
+  | "DELEGATED_ACCESS_FILTER_NOT_ALLOWED"
+  | "DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED"
+  | "DELEGATED_ACCESS_INACTIVE"
+  | "DELEGATED_ACCESS_KIND_NOT_ALLOWED"
+  | "DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED"
+  | "DELEGATED_ACCESS_ORGANIZATION_MISMATCH"
+  | "DELEGATED_ACCESS_OUTLET_NOT_ALLOWED"
+  | "DELEGATED_ACCESS_PERMISSION_DENIED"
+  | "DELEGATED_ACCESS_PRINCIPAL_INACTIVE"
+  | "DELEGATED_ACCESS_ROUTE_NOT_ALLOWED"
+  | "DELEGATED_ACCESS_TARGET_MISMATCH"
+  | "DELEGATED_ACCESS_UNSUPPORTED"
+  | "FORBIDDEN"
+  | "INTERNAL_ERROR"
+  | "PRECONDITION_FAILED"
+  | "PRECONDITION_REQUIRED"
+  | "UNAUTHORIZED"
+  | "VALIDATION_FAILED";
+export const dealFieldsUpdate = {
+  id: "crm.deal_fields.update",
+  method: "PATCH",
+  path: "/v1/deals/{id}/fields",
+  parameters: [
+    { member: "if_match", name: "If-Match", in: "header", required: true, encoding: "scalar" },
+    { member: "id", name: "id", in: "path", required: true, encoding: "scalar" },
+    { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
+  ],
+  success: { status: 200, body: "json", required: ["revision", "status"] },
+  body: "required",
+  idempotency: "safe",
+  authentication: "required",
+  organizationKeys: true,
+  ifMatch: { operation: "crm.deals.get", pointer: "/deal/revision" },
+  errors: [
+    "BAD_REQUEST",
+    "CLIENT_UPGRADE_REQUIRED",
+    "CONFLICT",
+    "CRM_SALES_PIPELINE_DEAL_NOT_FOUND",
+    "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
+    "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
+    "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED",
+    "DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED",
+    "DELEGATED_ACCESS_FEATURE_NOT_ENTITLED",
+    "DELEGATED_ACCESS_FILTER_NOT_ALLOWED",
+    "DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED",
+    "DELEGATED_ACCESS_INACTIVE",
+    "DELEGATED_ACCESS_KIND_NOT_ALLOWED",
+    "DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED",
+    "DELEGATED_ACCESS_ORGANIZATION_MISMATCH",
+    "DELEGATED_ACCESS_OUTLET_NOT_ALLOWED",
+    "DELEGATED_ACCESS_PERMISSION_DENIED",
+    "DELEGATED_ACCESS_PRINCIPAL_INACTIVE",
+    "DELEGATED_ACCESS_ROUTE_NOT_ALLOWED",
+    "DELEGATED_ACCESS_TARGET_MISMATCH",
+    "DELEGATED_ACCESS_UNSUPPORTED",
+    "FORBIDDEN",
+    "INTERNAL_ERROR",
+    "PRECONDITION_FAILED",
+    "PRECONDITION_REQUIRED",
+    "UNAUTHORIZED",
+    "VALIDATION_FAILED",
+  ],
+  "~types": undefined as unknown as { readonly input: DealFieldsUpdateInput; readonly output: DealFieldsUpdateOutput },
+} as const satisfies Operation<DealFieldsUpdateInput, DealFieldsUpdateOutput, DealFieldsUpdateErrorCode>;
 
 export type DealsCreateInput = {
   /**
@@ -1090,7 +1155,6 @@ export type DealsCreateInput = {
 export type DealsCreateOutput = T.KeyedAcknowledgmentEnvelope;
 export type DealsCreateErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_DEAL_OUTLET_REQUIRED"
@@ -1120,21 +1184,20 @@ export type DealsCreateErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const dealsCreate: Operation<DealsCreateInput, DealsCreateOutput, DealsCreateErrorCode> = {
+export const dealsCreate = {
   id: "crm.deals.create",
   method: "POST",
   path: "/v1/deals",
   parameters: [
     { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
   ],
-  success: { status: 200, body: "json", required: ["id", "status"] },
+  success: { status: 201, body: "json", required: ["id", "status"] },
   body: "required",
   idempotency: "keyed",
   authentication: "required",
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_DEAL_OUTLET_REQUIRED",
@@ -1165,7 +1228,8 @@ export const dealsCreate: Operation<DealsCreateInput, DealsCreateOutput, DealsCr
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: DealsCreateInput; readonly output: DealsCreateOutput },
+} as const satisfies Operation<DealsCreateInput, DealsCreateOutput, DealsCreateErrorCode>;
 
 export type DealsGetInput = {
   /**
@@ -1180,7 +1244,6 @@ export type DealsGetInput = {
 export type DealsGetOutput = T.GetDealOutputEnvelope;
 export type DealsGetErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CRM_SALES_PIPELINE_DEAL_NOT_FOUND"
   | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
@@ -1204,7 +1267,7 @@ export type DealsGetErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const dealsGet: Operation<DealsGetInput, DealsGetOutput, DealsGetErrorCode> = {
+export const dealsGet = {
   id: "crm.deals.get",
   method: "GET",
   path: "/v1/deals/{id}",
@@ -1219,7 +1282,6 @@ export const dealsGet: Operation<DealsGetInput, DealsGetOutput, DealsGetErrorCod
   organizationKeys: true,
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CRM_SALES_PIPELINE_DEAL_NOT_FOUND",
     "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
@@ -1244,19 +1306,20 @@ export const dealsGet: Operation<DealsGetInput, DealsGetOutput, DealsGetErrorCod
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: DealsGetInput; readonly output: DealsGetOutput },
+} as const satisfies Operation<DealsGetInput, DealsGetOutput, DealsGetErrorCode>;
 
 export type DealsListInput = {
   /**
    * Page number (1-based). Selects page mode; mutually exclusive with after
    * and before.
    */
-  p?: number;
+  page?: number;
   /**
    * Items per page. Defaults to 20, max 100 (larger values are clamped and
    * echoed as page_size).
    */
-  count?: number;
+  limit?: number;
   /**
    * Opaque cursor: the page after this position. Pass a previous response's
    * next_cursor.
@@ -1273,13 +1336,10 @@ export type DealsListInput = {
    */
   total?: T.TotalMode;
   /**
-   * Field name to sort by (e.g., "created_at", "name").
+   * Comma-separated sort fields, e.g. "name" or "-create_at,name". Each field
+   * sorts ascending unless prefixed with "-" for descending.
    */
-  s?: string;
-  /**
-   * Sort direction: "asc" or "desc". Defaults to "desc".
-   */
-  o?: "asc" | "desc";
+  sort?: string;
   /**
    * Filter is the client-supplied filter group. Query and form parameters
    * use unpadded base64url-encoded JSON; JSON bodies use an object.
@@ -1305,7 +1365,6 @@ export type DealsListInput = {
 export type DealsListOutput = T.ListDealsOutputEnvelope;
 export type DealsListErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
   | "DELEGATED_ACCESS_CREDENTIAL_LOCATION"
@@ -1330,18 +1389,17 @@ export type DealsListErrorCode =
   | "PAGINATION_PARAMS_INVALID"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const dealsList: Operation<DealsListInput, DealsListOutput, DealsListErrorCode> = {
+export const dealsList = {
   id: "crm.deals.list",
   method: "GET",
   path: "/v1/deals",
   parameters: [
-    { member: "p", name: "p", in: "query", required: false, encoding: "scalar" },
-    { member: "count", name: "count", in: "query", required: false, encoding: "scalar" },
+    { member: "page", name: "page", in: "query", required: false, encoding: "scalar" },
+    { member: "limit", name: "limit", in: "query", required: false, encoding: "scalar" },
     { member: "after", name: "after", in: "query", required: false, encoding: "scalar" },
     { member: "before", name: "before", in: "query", required: false, encoding: "scalar" },
     { member: "total", name: "total", in: "query", required: false, encoding: "scalar" },
-    { member: "s", name: "s", in: "query", required: false, encoding: "scalar" },
-    { member: "o", name: "o", in: "query", required: false, encoding: "scalar" },
+    { member: "sort", name: "sort", in: "query", required: false, encoding: "scalar" },
     { member: "filter", name: "filter", in: "query", required: false, encoding: "base64url-json" },
     { member: "pipeline_id", name: "pipeline_id", in: "query", required: false, encoding: "scalar" },
     { member: "stage_id", name: "stage_id", in: "query", required: false, encoding: "scalar" },
@@ -1354,8 +1412,8 @@ export const dealsList: Operation<DealsListInput, DealsListOutput, DealsListErro
   authentication: "required",
   organizationKeys: true,
   pagination: {
-    pageParam: "p",
-    pageSizeParam: "count",
+    pageParam: "page",
+    pageSizeParam: "limit",
     afterParam: "after",
     beforeParam: "before",
     totalParam: "total",
@@ -1375,7 +1433,6 @@ export const dealsList: Operation<DealsListInput, DealsListOutput, DealsListErro
   },
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
     "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
@@ -1401,7 +1458,8 @@ export const dealsList: Operation<DealsListInput, DealsListOutput, DealsListErro
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: DealsListInput; readonly output: DealsListOutput },
+} as const satisfies Operation<DealsListInput, DealsListOutput, DealsListErrorCode>;
 
 export type DealsMoveStageInput = {
   /**
@@ -1420,7 +1478,6 @@ export type DealsMoveStageInput = {
 export type DealsMoveStageOutput = T.DealRevisionOutputEnvelope;
 export type DealsMoveStageErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_SALES_PIPELINE_DEAL_NOT_FOUND"
@@ -1446,9 +1503,10 @@ export type DealsMoveStageErrorCode =
   | "FORBIDDEN"
   | "INTERNAL_ERROR"
   | "PRECONDITION_FAILED"
+  | "PRECONDITION_REQUIRED"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const dealsMoveStage: Operation<DealsMoveStageInput, DealsMoveStageOutput, DealsMoveStageErrorCode> = {
+export const dealsMoveStage = {
   id: "crm.deals.move_stage",
   method: "PUT",
   path: "/v1/deals/{id}/stage",
@@ -1465,7 +1523,6 @@ export const dealsMoveStage: Operation<DealsMoveStageInput, DealsMoveStageOutput
   ifMatch: { operation: "crm.deals.get", pointer: "/deal/revision" },
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_SALES_PIPELINE_DEAL_NOT_FOUND",
@@ -1491,10 +1548,12 @@ export const dealsMoveStage: Operation<DealsMoveStageInput, DealsMoveStageOutput
     "FORBIDDEN",
     "INTERNAL_ERROR",
     "PRECONDITION_FAILED",
+    "PRECONDITION_REQUIRED",
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: DealsMoveStageInput; readonly output: DealsMoveStageOutput },
+} as const satisfies Operation<DealsMoveStageInput, DealsMoveStageOutput, DealsMoveStageErrorCode>;
 
 export type DealsUpdateInput = {
   /**
@@ -1513,10 +1572,11 @@ export type DealsUpdateInput = {
 export type DealsUpdateOutput = T.DealRevisionOutputEnvelope;
 export type DealsUpdateErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
   | "CRM_SALES_PIPELINE_DEAL_NOT_FOUND"
+  | "CRM_SALES_PIPELINE_NOT_FOUND"
+  | "CRM_SALES_PIPELINE_STAGE_NOT_FOUND"
   | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
   | "DELEGATED_ACCESS_CREDENTIAL_LOCATION"
   | "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED"
@@ -1537,12 +1597,13 @@ export type DealsUpdateErrorCode =
   | "FORBIDDEN"
   | "INTERNAL_ERROR"
   | "PRECONDITION_FAILED"
+  | "PRECONDITION_REQUIRED"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const dealsUpdate: Operation<DealsUpdateInput, DealsUpdateOutput, DealsUpdateErrorCode> = {
+export const dealsUpdate = {
   id: "crm.deals.update",
   method: "PATCH",
-  path: "/v1/deals/{id}/fields",
+  path: "/v1/deals/{id}",
   parameters: [
     { member: "if_match", name: "If-Match", in: "header", required: true, encoding: "scalar" },
     { member: "id", name: "id", in: "path", required: true, encoding: "scalar" },
@@ -1556,10 +1617,11 @@ export const dealsUpdate: Operation<DealsUpdateInput, DealsUpdateOutput, DealsUp
   ifMatch: { operation: "crm.deals.get", pointer: "/deal/revision" },
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
     "CRM_SALES_PIPELINE_DEAL_NOT_FOUND",
+    "CRM_SALES_PIPELINE_NOT_FOUND",
+    "CRM_SALES_PIPELINE_STAGE_NOT_FOUND",
     "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
     "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
     "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED",
@@ -1580,22 +1642,24 @@ export const dealsUpdate: Operation<DealsUpdateInput, DealsUpdateOutput, DealsUp
     "FORBIDDEN",
     "INTERNAL_ERROR",
     "PRECONDITION_FAILED",
+    "PRECONDITION_REQUIRED",
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: DealsUpdateInput; readonly output: DealsUpdateOutput },
+} as const satisfies Operation<DealsUpdateInput, DealsUpdateOutput, DealsUpdateErrorCode>;
 
 export type SalesPipelinesListInput = {
   /**
    * Page number (1-based). Selects page mode; mutually exclusive with after
    * and before.
    */
-  p?: number;
+  page?: number;
   /**
    * Items per page. Defaults to 20, max 100 (larger values are clamped and
    * echoed as page_size).
    */
-  count?: number;
+  limit?: number;
   /**
    * Opaque cursor: the page after this position. Pass a previous response's
    * next_cursor.
@@ -1612,13 +1676,10 @@ export type SalesPipelinesListInput = {
    */
   total?: T.TotalMode;
   /**
-   * Field name to sort by (e.g., "created_at", "name").
+   * Comma-separated sort fields, e.g. "name" or "-create_at,name". Each field
+   * sorts ascending unless prefixed with "-" for descending.
    */
-  s?: string;
-  /**
-   * Sort direction: "asc" or "desc". Defaults to "desc".
-   */
-  o?: "asc" | "desc";
+  sort?: string;
   /**
    * Filter is the client-supplied filter group. Query and form parameters
    * use unpadded base64url-encoded JSON; JSON bodies use an object.
@@ -1636,7 +1697,6 @@ export type SalesPipelinesListInput = {
 export type SalesPipelinesListOutput = T.ListPipelinesOutputEnvelope;
 export type SalesPipelinesListErrorCode = 
   | "BAD_REQUEST"
-  | "CLIENT_CLOSED_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CRM_SALES_PIPELINE_STAGE_LIMIT"
   | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
@@ -1662,18 +1722,17 @@ export type SalesPipelinesListErrorCode =
   | "PAGINATION_PARAMS_INVALID"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const salesPipelinesList: Operation<SalesPipelinesListInput, SalesPipelinesListOutput, SalesPipelinesListErrorCode> = {
+export const salesPipelinesList = {
   id: "crm.sales_pipelines.list",
   method: "GET",
   path: "/v1/sales-pipelines",
   parameters: [
-    { member: "p", name: "p", in: "query", required: false, encoding: "scalar" },
-    { member: "count", name: "count", in: "query", required: false, encoding: "scalar" },
+    { member: "page", name: "page", in: "query", required: false, encoding: "scalar" },
+    { member: "limit", name: "limit", in: "query", required: false, encoding: "scalar" },
     { member: "after", name: "after", in: "query", required: false, encoding: "scalar" },
     { member: "before", name: "before", in: "query", required: false, encoding: "scalar" },
     { member: "total", name: "total", in: "query", required: false, encoding: "scalar" },
-    { member: "s", name: "s", in: "query", required: false, encoding: "scalar" },
-    { member: "o", name: "o", in: "query", required: false, encoding: "scalar" },
+    { member: "sort", name: "sort", in: "query", required: false, encoding: "scalar" },
     { member: "filter", name: "filter", in: "query", required: false, encoding: "base64url-json" },
     { member: "q", name: "q", in: "query", required: false, encoding: "scalar" },
     { member: "with_stages", name: "with_stages", in: "query", required: false, encoding: "scalar" },
@@ -1684,8 +1743,8 @@ export const salesPipelinesList: Operation<SalesPipelinesListInput, SalesPipelin
   authentication: "required",
   organizationKeys: true,
   pagination: {
-    pageParam: "p",
-    pageSizeParam: "count",
+    pageParam: "page",
+    pageSizeParam: "limit",
     afterParam: "after",
     beforeParam: "before",
     totalParam: "total",
@@ -1705,7 +1764,6 @@ export const salesPipelinesList: Operation<SalesPipelinesListInput, SalesPipelin
   },
   errors: [
     "BAD_REQUEST",
-    "CLIENT_CLOSED_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CRM_SALES_PIPELINE_STAGE_LIMIT",
     "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
@@ -1732,4 +1790,5 @@ export const salesPipelinesList: Operation<SalesPipelinesListInput, SalesPipelin
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-};
+  "~types": undefined as unknown as { readonly input: SalesPipelinesListInput; readonly output: SalesPipelinesListOutput },
+} as const satisfies Operation<SalesPipelinesListInput, SalesPipelinesListOutput, SalesPipelinesListErrorCode>;
