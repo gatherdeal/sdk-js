@@ -1,29 +1,30 @@
 // Generated from the GatherDeal public API contracts. Do not edit.
 
 import type { ProblemInfo } from "../../operation.js";
+import { delegatedAccessCodes } from "../../operation.js";
 import type * as T from "./types.js";
 
 /** Every problem code the operations of this API version declare. */
 export const problems = {
   BAD_REQUEST: { status: 400, retryable: false },
   CLIENT_UPGRADE_REQUIRED: { status: 426, retryable: false, details: { client: ["string"], current_version: ["string"], min_version: ["string"] } },
-  DELEGATED_ACCESS_AUDIENCE_MISMATCH: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_CREDENTIAL_LOCATION: { status: 401, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_EFFECT_NOT_ALLOWED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_FEATURE_NOT_ENTITLED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_FILTER_NOT_ALLOWED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_INACTIVE: { status: 401, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_KIND_NOT_ALLOWED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_ORGANIZATION_MISMATCH: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_OUTLET_NOT_ALLOWED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_PERMISSION_DENIED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_PRINCIPAL_INACTIVE: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_ROUTE_NOT_ALLOWED: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_TARGET_MISMATCH: { status: 403, retryable: false, details: { reason: ["string"] } },
-  DELEGATED_ACCESS_UNSUPPORTED: { status: 401, retryable: false, details: { contract_version: ["number"] } },
+  [delegatedAccessCodes[0]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[1]]: { status: 401, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[2]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[3]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[4]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[5]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[6]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[7]]: { status: 401, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[8]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[9]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[10]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[11]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[12]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[13]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[14]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[15]]: { status: 403, retryable: false, details: { reason: ["string"] } },
+  [delegatedAccessCodes[16]]: { status: 401, retryable: false, details: { contract_version: ["number"] } },
   FORBIDDEN: { status: 403, retryable: false },
   IDENTITY_DISTRIBUTION_NOT_FOUND: { status: 404, retryable: false },
   IDENTITY_ORGANIZATION_NOT_FOUND: { status: 404, retryable: false },
@@ -39,25 +40,25 @@ export const problems = {
 export type ProblemCode = keyof typeof problems;
 
 /** The details member of each problem code that carries details. */
-export interface ProblemDetails {
+export type ProblemDetails = {
   CLIENT_UPGRADE_REQUIRED: T.ClientUpgradeRequiredDetails;
-  DELEGATED_ACCESS_AUDIENCE_MISMATCH: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_CREDENTIAL_LOCATION: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_EFFECT_NOT_ALLOWED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_FEATURE_NOT_ENTITLED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_FILTER_NOT_ALLOWED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_INACTIVE: T.DelegatedAccessInactiveDetails;
-  DELEGATED_ACCESS_KIND_NOT_ALLOWED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_ORGANIZATION_MISMATCH: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_OUTLET_NOT_ALLOWED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_PERMISSION_DENIED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_PRINCIPAL_INACTIVE: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_ROUTE_NOT_ALLOWED: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_TARGET_MISMATCH: T.DelegatedAccessDeniedDetails;
-  DELEGATED_ACCESS_UNSUPPORTED: T.DelegatedAccessUnsupportedDetails;
   PAGINATION_CURSOR_INVALID: T.PaginationCursorInvalidDetails;
   PAGINATION_PARAMS_INVALID: T.PaginationParamsInvalidDetails;
 }
+  & { [Code in typeof delegatedAccessCodes[0]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[1]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[2]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[3]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[4]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[5]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[6]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[7]]: T.DelegatedAccessInactiveDetails }
+  & { [Code in typeof delegatedAccessCodes[8]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[9]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[10]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[11]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[12]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[13]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[14]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[15]]: T.DelegatedAccessDeniedDetails }
+  & { [Code in typeof delegatedAccessCodes[16]]: T.DelegatedAccessUnsupportedDetails };

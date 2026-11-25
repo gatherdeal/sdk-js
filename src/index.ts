@@ -1,25 +1,39 @@
 export { createClient } from "./client.js";
-export type { Client, ClientOptions, Method, Methods, ServiceClient } from "./client.js";
+export type { Client, ClientOptions, ServiceClient } from "./client.js";
 export {
-  ApiError,
-  ConnectionError,
-  CredentialError,
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  APIError,
+  APIUserAbortError,
+  AuthenticationError,
+  BadRequestError,
+  ConflictError,
   GatherDealError,
-  ProtocolError,
-  StatusError,
-  TimeoutError,
-  isApiError,
+  InternalServerError,
+  InvalidResponseError,
+  NotFoundError,
+  OutcomeUnknownError,
+  PermissionDeniedError,
+  PreconditionFailedError,
+  RateLimitError,
+  UnprocessableEntityError,
+  isAPIError,
 } from "./errors.js";
-export type { ApiErrorInit, ErrorContext, ProblemRecord, Violation } from "./errors.js";
-export { paginate } from "./pagination.js";
-export type { PageItem } from "./pagination.js";
-export type { CallOptions } from "./transport.js";
+export type { APIErrorInit, ErrorContext, ProblemRecord, Violation } from "./errors.js";
+export type { RequestOptions as CallOptions } from "./generated/operation.js";
 export type {
-  IfMatchSource,
+  APIPromise,
+  ConditionalRequestOptions,
   JsonKind,
+  KeyedRequestOptions,
+  Method,
+  Methods,
   Operation,
+  Page,
+  PagePromise,
   Pagination,
   Parameter,
   ParameterEncoding,
   ProblemInfo,
+  RequestOptions,
 } from "./generated/operation.js";

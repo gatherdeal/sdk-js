@@ -1,175 +1,221 @@
 import type { JsonKind, ProblemInfo } from "./generated/operation.js";
 
-/** Diagnostic fields every SDK error carries. */
+const marker = Symbol.for("@gatherdeal/sdk.error");
+
 export interface ErrorContext {
-  /** Public id of the operation, e.g. "crm.contacts.list". */
   readonly operation: string;
-  /** The Idempotency-Key the call sent, if any. */
   readonly idempotencyKey?: string | undefined;
-  /** The 1-based attempt that failed; undefined before the first request. */
-  readonly attempt?: number | undefined;
+  readonly attempt: number;
 }
 
-/**
- * Base class of every error the SDK throws. Caller aborts are rethrown as
- * given. Errors never carry requests, headers, credentials or the errors of a
- * custom fetch or token provider.
- */
 export class GatherDealError extends Error {
-  override name = "GatherDealError";
-  /** Public id of the operation, e.g. "crm.contacts.list". */
-  readonly operation: string;
-  /** The Idempotency-Key the call sent. Reuse it to retry the same write safely. */
-  readonly idempotencyKey: string | undefined;
-  /** The 1-based attempt that failed; undefined before the first request. */
-  readonly attempt: number | undefined;
+  static readonly errorName: string = "GatherDealError";
 
-  constructor(message: string, context: ErrorContext) {
-    super(message);
+  readonly operation: string;
+  readonly idempotencyKey: string | undefined;
+  readonly attempt: number;
+
+  constructor(message: string, context: ErrorContext, options?: ErrorOptions) {
+    super(message, options);
+    this.name = (new.target as typeof GatherDealError).errorName;
+    Object.defineProperty(this, marker, { value: this.name });
     this.operation = context.operation;
     this.idempotencyKey = context.idempotencyKey;
     this.attempt = context.attempt;
   }
 }
 
-/** A field the server rejected: located by a JSON pointer into the body or by a parameter. */
 export interface Violation {
   readonly rule: string;
   readonly detail: string;
   readonly pointer?: string;
   readonly parameter?: { readonly in: string; readonly name: string };
-  readonly params?: Readonly<Record<string, unknown>>;
+  readonly params?: JsonObject;
 }
 
-/** The durable record the failed call created, when the server names one. */
 export interface ProblemRecord {
   readonly kind: string;
   readonly id: string;
 }
 
-/** The fields of an API problem document. */
-export interface ApiErrorInit<Code extends string, Details> {
-  readonly status: number;
-  readonly code: Code;
-  readonly title: string;
-  readonly detail: string | undefined;
-  readonly retryable: boolean;
-  readonly retryAfterMs: number | undefined;
-  readonly correlationId: string | undefined;
-  readonly details: Details;
-  readonly violations: readonly Violation[];
-  readonly record: ProblemRecord | undefined;
-  readonly raw: Readonly<Record<string, unknown>>;
+export type JsonValue = string | number | boolean | null | readonly JsonValue[] | JsonObject;
+export interface JsonObject {
+  readonly [name: string]: JsonValue;
 }
 
-/** The server answered with a problem document (application/problem+json). */
-export class ApiError<Code extends string = string, Details = unknown> extends GatherDealError {
-  override name = "ApiError";
+export interface ResponseMetadata {
   readonly status: number;
-  /** Stable machine-readable code, e.g. "CRM_CONTACT_NOT_FOUND". */
-  readonly code: Code;
-  /** Short localized summary. */
-  readonly title: string;
-  /** Localized text about this occurrence. */
-  readonly detail: string | undefined;
-  /** Whether the same request may succeed later. */
+  readonly headers: Headers;
+  readonly requestID: string | undefined;
+}
+
+export interface APIErrorInit<Code extends string, Details> extends ResponseMetadata {
+  readonly code?: Code;
+  readonly title?: string;
+  readonly detail?: string;
   readonly retryable: boolean;
-  /** How long to wait before retrying, from retry_after_ms or the Retry-After header. */
   readonly retryAfterMs: number | undefined;
-  /** X-Correlation-Id of the response; quote it when contacting support. */
-  readonly correlationId: string | undefined;
-  /** Code-specific details, as sent. */
   readonly details: Details;
-  /** Field violations of VALIDATION_FAILED; empty otherwise. */
   readonly violations: readonly Violation[];
   readonly record: ProblemRecord | undefined;
-  /** The whole problem document, unknown members included. */
-  readonly raw: Readonly<Record<string, unknown>>;
+  readonly problem: JsonObject | undefined;
+  readonly body: string | undefined;
+}
 
-  constructor(init: ApiErrorInit<Code, Details>, context: ErrorContext) {
-    super(`${init.code} (${init.status}): ${init.detail ?? init.title}`, context);
+export class APIError<Code extends string = string, Details = unknown> extends GatherDealError {
+  static override readonly errorName: string = "APIError";
+  readonly status: number;
+  readonly headers: Headers;
+  readonly requestID: string | undefined;
+  readonly code?: Code;
+  readonly title?: string;
+  readonly detail?: string;
+  readonly details: Details;
+  readonly violations: readonly Violation[];
+  readonly record: ProblemRecord | undefined;
+  readonly problem: JsonObject | undefined;
+  readonly body: string | undefined;
+  readonly retryable: boolean;
+  readonly retryAfterMs: number | undefined;
+
+  constructor(init: APIErrorInit<Code, Details>, context: ErrorContext) {
+    super(init.code ? `${init.code} (${init.status}): ${init.detail ?? init.title}` : `HTTP ${init.status}`, context);
     this.status = init.status;
-    this.code = init.code;
-    this.title = init.title;
-    this.detail = init.detail;
-    this.retryable = init.retryable;
-    this.retryAfterMs = init.retryAfterMs;
-    this.correlationId = init.correlationId;
+    this.headers = init.headers;
+    this.requestID = init.requestID;
+    if (init.code !== undefined) this.code = init.code;
+    if (init.title !== undefined) this.title = init.title;
+    if (init.detail !== undefined) this.detail = init.detail;
     this.details = init.details;
     this.violations = init.violations;
     this.record = init.record;
-    this.raw = init.raw;
+    this.problem = init.problem;
+    this.body = init.body;
+    this.retryable = init.retryable;
+    this.retryAfterMs = init.retryAfterMs;
   }
 }
 
-/** A non-2xx response without a problem document, e.g. from a gateway. */
-export class StatusError extends GatherDealError {
-  override name = "StatusError";
-  readonly status: number;
-  readonly retryAfterMs: number | undefined;
-  readonly correlationId: string | undefined;
+export class BadRequestError extends APIError {
+  static override readonly errorName: string = "BadRequestError";
+}
+export class AuthenticationError extends APIError {
+  static override readonly errorName: string = "AuthenticationError";
+}
+export class PermissionDeniedError extends APIError {
+  static override readonly errorName: string = "PermissionDeniedError";
+}
+export class NotFoundError extends APIError {
+  static override readonly errorName: string = "NotFoundError";
+}
+export class ConflictError extends APIError {
+  static override readonly errorName: string = "ConflictError";
+}
+export class PreconditionFailedError extends APIError {
+  static override readonly errorName: string = "PreconditionFailedError";
+}
+export class UnprocessableEntityError extends APIError {
+  static override readonly errorName: string = "UnprocessableEntityError";
+}
+export class RateLimitError extends APIError {
+  static override readonly errorName: string = "RateLimitError";
+}
+export class InternalServerError extends APIError {
+  static override readonly errorName: string = "InternalServerError";
+}
+
+const statusErrors = new Map<number, (new (init: APIErrorInit<string, unknown>, context: ErrorContext) => APIError) & { readonly errorName: string }>([
+  [400, BadRequestError],
+  [401, AuthenticationError],
+  [403, PermissionDeniedError],
+  [404, NotFoundError],
+  [409, ConflictError],
+  [412, PreconditionFailedError],
+  [422, UnprocessableEntityError],
+  [429, RateLimitError],
+]);
+
+export function httpError(init: APIErrorInit<string, unknown>, context: ErrorContext): APIError {
+  const ErrorClass = init.status >= 500 ? InternalServerError : statusErrors.get(init.status) ?? APIError;
+  return new ErrorClass(init, context);
+}
+
+export class APIConnectionError extends GatherDealError {
+  static override readonly errorName: string = "APIConnectionError";
+}
+export class APIConnectionTimeoutError extends APIConnectionError {
+  static override readonly errorName: string = "APIConnectionTimeoutError";
+}
+export class APIUserAbortError extends GatherDealError {
+  static override readonly errorName: string = "APIUserAbortError";
+}
+
+export class OutcomeUnknownError extends APIConnectionError {
+  static override readonly errorName: string = "OutcomeUnknownError";
+  readonly ifMatch: string;
+  readonly readOperation: string;
+  readonly status: number | undefined;
+  readonly requestID: string | undefined;
 
   constructor(
-    init: { status: number; retryAfterMs: number | undefined; correlationId: string | undefined },
+    ifMatch: string,
+    readOperation: string,
+    response: ResponseMetadata | undefined,
     context: ErrorContext,
+    cause: unknown,
   ) {
-    super(`HTTP ${init.status}`, context);
-    this.status = init.status;
-    this.retryAfterMs = init.retryAfterMs;
-    this.correlationId = init.correlationId;
+    super(`${context.operation}: write outcome is unknown. Read the resource again with ${readOperation} and compare the fields you intended to change before retrying.`, context, { cause });
+    this.ifMatch = ifMatch;
+    this.readOperation = readOperation;
+    this.status = response?.status;
+    this.requestID = response?.requestID;
   }
 }
 
-/** A response the SDK cannot accept: a redirect, a malformed problem or an unexpected success shape. */
-export class ProtocolError extends GatherDealError {
-  override name = "ProtocolError";
-  /** HTTP status, 0 for an opaque redirect. */
+export class InvalidResponseError extends GatherDealError implements ResponseMetadata {
+  static override readonly errorName: string = "InvalidResponseError";
   readonly status: number;
-  /** The response body as text. */
-  readonly body: string;
+  readonly headers: Headers;
+  readonly requestID: string | undefined;
 
-  constructor(message: string, init: { status: number; body: string }, context: ErrorContext) {
-    super(message, context);
-    this.status = init.status;
-    this.body = init.body;
+  constructor(message: string, response: ResponseMetadata, context: ErrorContext) {
+    super(`${context.operation}: ${message} (HTTP ${response.status})`, context);
+    this.status = response.status;
+    this.headers = new Headers(response.headers);
+    this.requestID = response.requestID;
   }
 }
 
-/** The request did not complete: DNS, TLS, connection reset or a blocked cross-origin request. */
-export class ConnectionError extends GatherDealError {
-  override name = "ConnectionError";
-}
+const httpMarkers = new Set([
+  APIError.errorName,
+  InternalServerError.errorName,
+  ...Array.from(statusErrors.values(), (ErrorClass) => ErrorClass.errorName),
+]);
 
-/** The call exceeded timeoutMs. */
-export class TimeoutError extends GatherDealError {
-  override name = "TimeoutError";
-}
-
-/** The token provider threw, or returned something that is not a usable token. */
-export class CredentialError extends GatherDealError {
-  override name = "CredentialError";
-}
-
-/** Narrows error to an ApiError, optionally with the given code. */
-export function isApiError(error: unknown): error is ApiError;
-export function isApiError<Code extends string>(error: unknown, code: Code): error is ApiError<Code>;
-export function isApiError(error: unknown, code?: string): boolean {
-  return error instanceof ApiError && (code === undefined || error.code === code);
+export function isAPIError(error: unknown): error is APIError;
+export function isAPIError<Code extends string>(error: unknown, code: Code): error is APIError<Code> & { readonly code: Code };
+export function isAPIError(error: unknown, code?: string): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const value = error as Partial<APIError> & { [marker]?: unknown };
+  return typeof value[marker] === "string" && httpMarkers.has(value[marker]) &&
+    typeof value.status === "number" && Number.isInteger(value.status) && value.status >= 400 &&
+    typeof value.operation === "string" &&
+    (value.code === undefined || typeof value.code === "string") &&
+    (code === undefined || value.code === code);
 }
 
 function kindOf(value: unknown): JsonKind | "undefined" {
   if (value === null) return "null";
   if (Array.isArray(value)) return "array";
-  const t = typeof value;
-  return t === "string" || t === "number" || t === "boolean" || t === "object" ? t : "undefined";
+  const type = typeof value;
+  return type === "string" || type === "number" || type === "boolean" || type === "object" ? type : "undefined";
 }
 
-/** Whether details carry every required field of the problem code with an accepted kind. */
 export function detailsMatch(info: ProblemInfo | undefined, details: unknown): boolean {
   if (info?.details === undefined) return true;
   if (kindOf(details) !== "object") return false;
-  const record = details as Record<string, unknown>;
+  const fields = details as Record<string, unknown>;
   return Object.entries(info.details).every(([field, kinds]) =>
-    (kinds as readonly string[]).includes(kindOf(record[field])),
+    Object.hasOwn(fields, field) && kinds.some((kind) => kind === kindOf(fields[field])),
   );
 }

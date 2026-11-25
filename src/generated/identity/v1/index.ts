@@ -13,7 +13,7 @@ export const service = {
 export const operations = {
   outlets: {
     /**
-     * Fetch Outlet By ID
+     * Get an outlet.
      *
      * Requires the permissions `identity.outlet.read`.
      *
@@ -21,13 +21,15 @@ export const operations = {
      */
     get: op.outletsGet,
     /**
-     * Fetch Outlets
+     * List outlets.
      *
      * Lists the outlets visible to the caller.
      *
      * Requires the permissions `identity.outlet.read`.
      *
      * Credentials are optional.
+     *
+     * Use `for await` to iterate over all results.
      */
     list: op.outletsList,
   },

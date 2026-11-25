@@ -4,7 +4,7 @@
  * Descriptor types of the generated operations.
  *
  * A generated operation is data: the runtime builds the request from its
- * descriptor and the caller's flat input object.
+ * descriptor and the call arguments.
  */
 
 /** How a parameter value travels. */
@@ -20,11 +20,11 @@ export type ParameterEncoding =
 
 /** A request parameter, read from the input member of the same purpose. */
 export interface Parameter {
-  /** Name of the member in the flat input object. */
+  /** Name of the member in the params object. */
   readonly member: string;
   /** Name on the wire. */
   readonly name: string;
-  readonly in: "path" | "query" | "header";
+  readonly in: "path" | "query";
   readonly required: boolean;
   readonly encoding: ParameterEncoding;
 }
@@ -52,14 +52,6 @@ export interface Pagination {
   readonly totalPagesField: string;
 }
 
-/** Where a conditional write finds the revision it sends as If-Match. */
-export interface IfMatchSource {
-  /** Public id of the read operation. */
-  readonly operation: string;
-  /** JSON pointer of the revision in the read's success body. */
-  readonly pointer: string;
-}
-
 /** JSON value kinds a problem detail field may have. */
 export type JsonKind = "string" | "number" | "boolean" | "array" | "object" | "null";
 
@@ -71,37 +63,112 @@ export interface ProblemInfo {
   readonly details?: Readonly<Record<string, readonly JsonKind[]>>;
 }
 
-/**
- * One API operation. Input, Output and Code are carried for typing only.
- *
- * Members of the input that are not parameters form the JSON request body.
- */
-export interface Operation<Input, Output, Code extends string> {
-  /** Public id, e.g. "crm.contacts.list". */
+/** One API operation with its call signature carried for typing. */
+export interface Operation<Args extends readonly unknown[] = readonly unknown[], Result = unknown, Code extends string = string> {
   readonly id: string;
   readonly method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  /** Path template relative to the service base URL, e.g. "/v1/contacts/{id}". */
   readonly path: string;
+  /** Path parameter passed as the first argument when present. */
+  readonly positional?: string;
   readonly parameters: readonly Parameter[];
-  /** The success response: its status, whether it has a JSON body, and the top-level members that body requires. */
-  readonly success: {
-    readonly status: number;
-    readonly body: "json" | "none";
-    readonly required: readonly string[];
-  };
   readonly body: "none" | "optional" | "required";
-  /**
-   * "safe": repeating the request has no further effect. "keyed": the
-   * request carries an Idempotency-Key. "none": a repeat may apply twice.
-   */
+  readonly success: { readonly status: number; readonly body: "json" | "none"; readonly required: readonly string[] };
+  readonly result:
+    | { readonly kind: "void" }
+    | { readonly kind: "resource"; readonly key: string }
+    | { readonly kind: "page"; readonly key: string; readonly pagination: Pagination }
+    | { readonly kind: "object" };
   readonly idempotency: "safe" | "keyed" | "none";
-  /** "optional": anonymous callers are admitted too. */
+  readonly conditional?: { readonly read: string };
   readonly authentication: "required" | "optional";
-  /** Whether organization API keys are admitted. */
   readonly organizationKeys: boolean;
-  readonly pagination?: Pagination;
-  readonly ifMatch?: IfMatchSource;
-  /** Problem codes the operation declares. */
   readonly errors: readonly Code[];
-  readonly "~types"?: { readonly input: Input; readonly output: Output };
+  readonly "~types"?: { readonly args: Args; readonly result: Result };
 }
+
+/** Options for a single request. */
+export interface RequestOptions {
+  signal?: AbortSignal;
+  timeout?: number;
+  maxRetries?: number;
+  headers?: Record<string, string | null>;
+}
+
+/** Options for an operation that accepts an idempotency key. */
+export interface KeyedRequestOptions extends RequestOptions { idempotencyKey?: string }
+
+/** Options for a write requiring a revision from a read. */
+export interface ConditionalRequestOptions extends RequestOptions { ifMatch: string }
+
+/** The params slot of an operation without request members. */
+export type EmptyParams = Record<string, never>;
+
+/** A response promise exposing the HTTP response alongside its typed result. */
+export interface APIPromise<T> extends Promise<T> {
+  asResponse(): Promise<Response>;
+  withResponse(): Promise<{ data: T; response: Response; requestID: string | undefined }>;
+}
+
+/** One page of results and methods to continue the request. */
+export interface Page<T> extends AsyncIterable<T> {
+  readonly data: T[];
+  readonly has_next_page: boolean;
+  readonly has_prev_page: boolean;
+  readonly next_cursor?: string;
+  readonly prev_cursor?: string;
+  readonly page?: number;
+  readonly page_size: number;
+  readonly total_items?: number;
+  readonly total_pages?: number;
+  hasNextPage(): boolean;
+  getNextPage(): Promise<Page<T>>;
+  iterPages(): AsyncIterable<Page<T>>;
+}
+
+/** An awaitable first page that also iterates over individual results. */
+export interface PagePromise<T> extends APIPromise<Page<T>>, AsyncIterable<T> {}
+
+/** The HTTP error fields refined by a generated guard. */
+export interface APIErrorShape<Code extends string = string, Details = unknown> extends Error {
+  readonly status: number;
+  readonly headers: Headers;
+  readonly requestID: string | undefined;
+  readonly code?: Code;
+  readonly details: Details;
+}
+
+/** Narrows an HTTP error to codes and details declared by an operation. */
+export interface ErrorGuard<Code extends string, PD> {
+  isError(error: unknown): error is APIErrorShape<Code>;
+  isError<K extends Code>(error: unknown, code: K): error is APIErrorShape<K, K extends keyof PD ? PD[K] : unknown>;
+}
+
+/** The callable signature and error guard of an operation descriptor. */
+export type Method<O, PD> = O extends Operation<infer A, infer R, infer C> ? ((...args: A) => R) & ErrorGuard<C, PD> : never;
+
+/** Maps a descriptor tree to the SDK's method namespaces. */
+export type Methods<T, PD> = { readonly [K in keyof T]: T[K] extends Operation ? Method<T[K], PD> : Methods<T[K], PD> };
+
+/** Shared delegated-access problem codes. */
+export const delegatedAccessCodes = [
+  "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
+  "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
+  "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED",
+  "DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED",
+  "DELEGATED_ACCESS_FEATURE_NOT_ENTITLED",
+  "DELEGATED_ACCESS_FILTER_NOT_ALLOWED",
+  "DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED",
+  "DELEGATED_ACCESS_INACTIVE",
+  "DELEGATED_ACCESS_KIND_NOT_ALLOWED",
+  "DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED",
+  "DELEGATED_ACCESS_ORGANIZATION_MISMATCH",
+  "DELEGATED_ACCESS_OUTLET_NOT_ALLOWED",
+  "DELEGATED_ACCESS_PERMISSION_DENIED",
+  "DELEGATED_ACCESS_PRINCIPAL_INACTIVE",
+  "DELEGATED_ACCESS_ROUTE_NOT_ALLOWED",
+  "DELEGATED_ACCESS_TARGET_MISMATCH",
+  "DELEGATED_ACCESS_UNSUPPORTED",
+] as const;
+
+/** A problem code shared by delegated-access operations. */
+export type DelegatedAccessErrorCode = typeof delegatedAccessCodes[number];

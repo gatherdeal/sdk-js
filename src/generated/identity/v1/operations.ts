@@ -1,14 +1,10 @@
 // Generated from the GatherDeal public API contracts. Do not edit.
 
-import type { Operation } from "../../operation.js";
+import type { APIPromise, DelegatedAccessErrorCode, Operation, PagePromise, RequestOptions } from "../../operation.js";
+import { delegatedAccessCodes } from "../../operation.js";
 import type * as T from "./types.js";
 
-export type OutletsGetInput = {
-  /**
-   * UUID of the outlet to fetch. To find an outlet by its code, list
-   * outlets with the exact code selector.
-   */
-  id: string;
+export type OutletGetParams = {
   /**
    * When true, include a lightweight owner object (id, name, profile image).
    */
@@ -22,27 +18,10 @@ export type OutletsGetInput = {
    */
   outlet_id?: string;
 };
-export type OutletsGetOutput = T.FetchOutletByIDOutputEnvelope;
-export type OutletsGetErrorCode = 
+export type OutletGetErrorCode =
+  | DelegatedAccessErrorCode
   | "BAD_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
-  | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
-  | "DELEGATED_ACCESS_CREDENTIAL_LOCATION"
-  | "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_FEATURE_NOT_ENTITLED"
-  | "DELEGATED_ACCESS_FILTER_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_INACTIVE"
-  | "DELEGATED_ACCESS_KIND_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED"
-  | "DELEGATED_ACCESS_ORGANIZATION_MISMATCH"
-  | "DELEGATED_ACCESS_OUTLET_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_PERMISSION_DENIED"
-  | "DELEGATED_ACCESS_PRINCIPAL_INACTIVE"
-  | "DELEGATED_ACCESS_ROUTE_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_TARGET_MISMATCH"
-  | "DELEGATED_ACCESS_UNSUPPORTED"
   | "FORBIDDEN"
   | "IDENTITY_DISTRIBUTION_NOT_FOUND"
   | "IDENTITY_ORGANIZATION_NOT_FOUND"
@@ -55,37 +34,22 @@ export const outletsGet = {
   id: "identity.outlets.get",
   method: "GET",
   path: "/v1/outlets/{id}",
+  positional: "id",
   parameters: [
-    { member: "id", name: "id", in: "path", required: true, encoding: "scalar" },
     { member: "with_owner", name: "with_owner", in: "query", required: false, encoding: "scalar" },
     { member: "with_organization", name: "with_organization", in: "query", required: false, encoding: "scalar" },
     { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
   ],
-  success: { status: 200, body: "json", required: ["outlet", "status"] },
   body: "none",
+  success: { status: 200, body: "json", required: ["outlet", "status"] },
+  result: { kind: "resource", key: "outlet" },
   idempotency: "safe",
   authentication: "optional",
   organizationKeys: true,
   errors: [
+    ...delegatedAccessCodes,
     "BAD_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
-    "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
-    "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
-    "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED",
-    "DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED",
-    "DELEGATED_ACCESS_FEATURE_NOT_ENTITLED",
-    "DELEGATED_ACCESS_FILTER_NOT_ALLOWED",
-    "DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED",
-    "DELEGATED_ACCESS_INACTIVE",
-    "DELEGATED_ACCESS_KIND_NOT_ALLOWED",
-    "DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED",
-    "DELEGATED_ACCESS_ORGANIZATION_MISMATCH",
-    "DELEGATED_ACCESS_OUTLET_NOT_ALLOWED",
-    "DELEGATED_ACCESS_PERMISSION_DENIED",
-    "DELEGATED_ACCESS_PRINCIPAL_INACTIVE",
-    "DELEGATED_ACCESS_ROUTE_NOT_ALLOWED",
-    "DELEGATED_ACCESS_TARGET_MISMATCH",
-    "DELEGATED_ACCESS_UNSUPPORTED",
     "FORBIDDEN",
     "IDENTITY_DISTRIBUTION_NOT_FOUND",
     "IDENTITY_ORGANIZATION_NOT_FOUND",
@@ -95,10 +59,10 @@ export const outletsGet = {
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-  "~types": undefined as unknown as { readonly input: OutletsGetInput; readonly output: OutletsGetOutput },
-} as const satisfies Operation<OutletsGetInput, OutletsGetOutput, OutletsGetErrorCode>;
+  "~types": undefined as unknown as { readonly args: [id: string, params?: OutletGetParams, options?: RequestOptions]; readonly result: APIPromise<T.Outlet> },
+} as const satisfies Operation<[id: string, params?: OutletGetParams, options?: RequestOptions], APIPromise<T.Outlet>, OutletGetErrorCode>;
 
-export type OutletsListInput = {
+export type OutletListParams = {
   /**
    * UUID of the organization whose outlets to list. Anonymous callers need it,
    * or an id or code selector, to receive rows; authenticated callers only
@@ -173,27 +137,10 @@ export type OutletsListInput = {
    */
   outlet_id?: string;
 };
-export type OutletsListOutput = T.FetchOutletsOutputEnvelope;
-export type OutletsListErrorCode = 
+export type OutletListErrorCode =
+  | DelegatedAccessErrorCode
   | "BAD_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
-  | "DELEGATED_ACCESS_AUDIENCE_MISMATCH"
-  | "DELEGATED_ACCESS_CREDENTIAL_LOCATION"
-  | "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_FEATURE_NOT_ENTITLED"
-  | "DELEGATED_ACCESS_FILTER_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_INACTIVE"
-  | "DELEGATED_ACCESS_KIND_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED"
-  | "DELEGATED_ACCESS_ORGANIZATION_MISMATCH"
-  | "DELEGATED_ACCESS_OUTLET_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_PERMISSION_DENIED"
-  | "DELEGATED_ACCESS_PRINCIPAL_INACTIVE"
-  | "DELEGATED_ACCESS_ROUTE_NOT_ALLOWED"
-  | "DELEGATED_ACCESS_TARGET_MISMATCH"
-  | "DELEGATED_ACCESS_UNSUPPORTED"
   | "FORBIDDEN"
   | "IDENTITY_DISTRIBUTION_NOT_FOUND"
   | "IDENTITY_ORGANIZATION_NOT_FOUND"
@@ -225,12 +172,9 @@ export const outletsList = {
     { member: "filter", name: "filter", in: "query", required: false, encoding: "base64url-json" },
     { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
   ],
-  success: { status: 200, body: "json", required: ["outlets", "status"] },
   body: "none",
-  idempotency: "safe",
-  authentication: "optional",
-  organizationKeys: true,
-  pagination: {
+  success: { status: 200, body: "json", required: ["outlets", "status"] },
+  result: { kind: "page", key: "outlets", pagination: {
     pageParam: "page",
     pageSizeParam: "limit",
     afterParam: "after",
@@ -249,27 +193,14 @@ export const outletsList = {
     prevCursorField: "prev_cursor",
     totalItemsField: "total_items",
     totalPagesField: "total_pages",
-  },
+  } },
+  idempotency: "safe",
+  authentication: "optional",
+  organizationKeys: true,
   errors: [
+    ...delegatedAccessCodes,
     "BAD_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
-    "DELEGATED_ACCESS_AUDIENCE_MISMATCH",
-    "DELEGATED_ACCESS_CREDENTIAL_LOCATION",
-    "DELEGATED_ACCESS_EFFECT_NOT_ALLOWED",
-    "DELEGATED_ACCESS_EXPANSION_NOT_ALLOWED",
-    "DELEGATED_ACCESS_FEATURE_NOT_ENTITLED",
-    "DELEGATED_ACCESS_FILTER_NOT_ALLOWED",
-    "DELEGATED_ACCESS_IMPERSONATION_NOT_ALLOWED",
-    "DELEGATED_ACCESS_INACTIVE",
-    "DELEGATED_ACCESS_KIND_NOT_ALLOWED",
-    "DELEGATED_ACCESS_ORGANIZATION_KEY_NOT_ADMITTED",
-    "DELEGATED_ACCESS_ORGANIZATION_MISMATCH",
-    "DELEGATED_ACCESS_OUTLET_NOT_ALLOWED",
-    "DELEGATED_ACCESS_PERMISSION_DENIED",
-    "DELEGATED_ACCESS_PRINCIPAL_INACTIVE",
-    "DELEGATED_ACCESS_ROUTE_NOT_ALLOWED",
-    "DELEGATED_ACCESS_TARGET_MISMATCH",
-    "DELEGATED_ACCESS_UNSUPPORTED",
     "FORBIDDEN",
     "IDENTITY_DISTRIBUTION_NOT_FOUND",
     "IDENTITY_ORGANIZATION_NOT_FOUND",
@@ -280,5 +211,5 @@ export const outletsList = {
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-  "~types": undefined as unknown as { readonly input: OutletsListInput; readonly output: OutletsListOutput },
-} as const satisfies Operation<OutletsListInput, OutletsListOutput, OutletsListErrorCode>;
+  "~types": undefined as unknown as { readonly args: [params?: OutletListParams, options?: RequestOptions]; readonly result: PagePromise<T.Outlet> },
+} as const satisfies Operation<[params?: OutletListParams, options?: RequestOptions], PagePromise<T.Outlet>, OutletListErrorCode>;

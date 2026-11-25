@@ -1,84 +1,64 @@
 import {
-  ApiError,
-  ConnectionError,
-  CredentialError,
-  GatherDealError,
-  StatusError,
-  TimeoutError,
-  type ErrorContext,
+  APIConnectionError, APIConnectionTimeoutError, APIError, APIUserAbortError, InvalidResponseError,
+  OutcomeUnknownError, type ErrorContext, type ResponseMetadata,
 } from "./errors.js";
-import type { Operation, ProblemInfo } from "./generated/operation.js";
-import { serializeRequest, type SerializedRequest } from "./request.js";
-import { readResponse } from "./response.js";
+import type { Operation, ProblemInfo, RequestOptions } from "./generated/operation.js";
+import type { SerializedRequest } from "./request.js";
+import { failure, responseMetadata, success, type Execution } from "./response.js";
 import { randomId, sleep } from "./runtime.js";
 
-/** Per-call options, the second argument of every method. */
-export interface CallOptions {
-  /** Aborts the call; the abort reason is thrown as is. */
-  readonly signal?: AbortSignal;
-  /** Time limit of the whole call in milliseconds, retries and token refresh included. */
-  readonly timeoutMs?: number;
-  /** Additional attempts after the first; overrides the client setting. */
-  readonly retries?: number;
-  /** Idempotency-Key of a keyed write. Defaults to a new random key per call. */
+export interface TransportOptions extends RequestOptions {
   readonly idempotencyKey?: string;
+  readonly ifMatch?: string;
 }
-
-/** Where the bearer credential of each request comes from. */
-export type Credential =
-  | { readonly kind: "none" }
-  | { readonly kind: "apiKey"; readonly apiKey: string }
-  | { readonly kind: "token"; readonly token: () => string | Promise<string> };
 
 export interface TransportConfig {
   readonly fetch: typeof globalThis.fetch;
-  readonly credential: Credential;
-  readonly retries: number;
-  readonly timeoutMs: number;
+  readonly authorization?: string;
+  readonly accessToken?: () => string | Promise<string>;
+  readonly maxRetries: number;
+  readonly timeout: number;
+  readonly requestHeaders?: (options: RequestOptions) => HeadersInit;
 }
+
+export type ProblemTable = Readonly<Record<string, ProblemInfo>>;
 
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
-const BACKOFF_BASE_MS = 200;
-const BACKOFF_MAX_MS = 5_000;
-/** Longest wait the SDK takes before a retry; a longer one is thrown to the caller. */
-const RETRY_AFTER_MAX_MS = 60_000;
-const ACCEPT = "application/json, application/problem+json";
-/** Visible ASCII only: a value fetch sends unchanged in a header. */
-const HEADER_TOKEN = /^[\x21-\x7e]+$/;
+const MAX_TIMEOUT = 2_147_483_647;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
-const MAX_TIMEOUT_MS = 2_147_483_647;
-
-type AnyOperation = Operation<unknown, unknown, string>;
-type ProblemTable = Readonly<Record<string, ProblemInfo>>;
-
-/** Rejection of a wait that the call's signal ended. */
 const ABORTED = Symbol("aborted");
 
-/** Whether value is usable as a bearer credential. */
 export function isHeaderToken(value: unknown): value is string {
-  return typeof value === "string" && HEADER_TOKEN.test(value);
+  return typeof value === "string" && /^[\x21-\x7e]+$/.test(value);
 }
 
-/** Throws unless value is a non-negative safe integer. */
-export function checkRetries(value: unknown, where: string): asserts value is number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) {
-    throw new TypeError(`${where}: retries must be a non-negative integer`);
+export function checkRetries(value: number, where: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`${where}: maxRetries must be a non-negative integer`);
   }
 }
 
-/** Throws unless value is a positive number of milliseconds a timer can hold. */
-export function checkTimeout(value: unknown, where: string): asserts value is number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > MAX_TIMEOUT_MS) {
-    throw new TypeError(`${where}: timeoutMs must be a number from 1 to ${MAX_TIMEOUT_MS}`);
+export function checkTimeout(value: number, where: string): void {
+  if (!Number.isFinite(value) || value < 1 || value > MAX_TIMEOUT) {
+    throw new TypeError(`${where}: timeout must be a number from 1 to ${MAX_TIMEOUT}`);
   }
+}
+
+function idempotencyKeyOf(op: Operation, key?: string): string | undefined {
+  if (key === undefined) return op.idempotency === "keyed" ? randomId() : undefined;
+  if (op.idempotency !== "keyed") throw new TypeError(`${op.id}: idempotencyKey applies to keyed writes only`);
+  if (!isHeaderToken(key) || key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+    throw new TypeError(`${op.id}: idempotencyKey must be 1 to ${MAX_IDEMPOTENCY_KEY_LENGTH} visible ASCII characters without spaces`);
+  }
+  return key;
 }
 
 function race<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(ABORTED);
-  return new Promise<T>((resolve, reject) => {
+  return new Promise((resolve, reject) => {
     const onAbort = () => reject(ABORTED);
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise.then(
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+    void promise.then(
       (value) => {
         signal.removeEventListener("abort", onAbort);
         resolve(value);
@@ -91,177 +71,145 @@ function race<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-function isRetryable(error: unknown, problems: ProblemTable): error is GatherDealError {
-  if (error instanceof ConnectionError) return true;
-  if (error instanceof ApiError) {
-    if (error.status === 401) return false;
-    return Object.hasOwn(problems, error.code) ? problems[error.code]!.retryable : error.retryable;
-  }
-  if (error instanceof StatusError) return RETRYABLE_STATUS.has(error.status);
-  return false;
+function isRetryable(error: unknown, problems: ProblemTable): boolean {
+  if (error instanceof APIConnectionError) return true;
+  if (!(error instanceof APIError)) return false;
+  return RETRYABLE_STATUS.has(error.status) ||
+    (error.code !== undefined && Object.hasOwn(problems, error.code) ? problems[error.code]!.retryable : error.retryable);
 }
 
-function isUnauthorized(error: unknown): boolean {
-  return (error instanceof ApiError || error instanceof StatusError) && error.status === 401;
+function retryDelay(error: unknown, attempt: number): number {
+  if (error instanceof APIError && error.retryAfterMs !== undefined) return error.retryAfterMs;
+  const ceiling = Math.min(5_000, 200 * 2 ** (attempt - 1));
+  return ceiling * (0.5 + Math.random() * 0.5);
 }
 
-function retryDelay(error: GatherDealError, attempt: number): number {
-  const hinted = error instanceof ApiError || error instanceof StatusError ? error.retryAfterMs : undefined;
-  if (hinted !== undefined) return hinted;
-  const ceiling = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (attempt - 1));
-  return ceiling / 2 + Math.random() * (ceiling / 2);
+function userAbort(context: ErrorContext, signal: AbortSignal): APIUserAbortError {
+  return new APIUserAbortError(`${context.operation}: request aborted`, context, { cause: signal.reason });
 }
 
-function errorName(error: unknown): string {
-  const name = (error as { name?: unknown } | null)?.name;
-  return typeof name === "string" && /^\w{1,64}$/.test(name) ? name : "Error";
+export function checkCallerAbort(context: ErrorContext, signal?: AbortSignal): void {
+  if (signal?.aborted) throw userAbort(context, signal);
 }
 
-async function acquireToken(
-  token: () => string | Promise<string>,
+async function bodyText(
+  response: Response,
+  metadata: ResponseMetadata,
   signal: AbortSignal,
-  context: ErrorContext,
 ): Promise<string> {
-  let value: unknown;
   try {
-    value = await race(Promise.resolve().then(token), signal);
+    return await race(response.text(), signal);
   } catch (error) {
-    if (error === ABORTED) throw error;
-    throw new CredentialError(`${context.operation}: token provider failed (${errorName(error)})`, context);
-  }
-  if (!isHeaderToken(value)) {
-    throw new CredentialError(`${context.operation}: token provider returned an unusable token`, context);
-  }
-  return value;
-}
-
-async function attempt(
-  config: TransportConfig,
-  op: AnyOperation,
-  request: SerializedRequest,
-  bearer: string | undefined,
-  signal: AbortSignal,
-  context: ErrorContext,
-): Promise<unknown> {
-  const headers: Record<string, string> = { Accept: ACCEPT, ...request.headers };
-  if (bearer !== undefined) headers.Authorization = `Bearer ${bearer}`;
-  const init: RequestInit = {
-    method: request.method,
-    headers,
-    credentials: "omit",
-    redirect: "manual",
-    signal,
-  };
-  if (request.body !== undefined) init.body = request.body;
-  let response: Response;
-  try {
-    response = await race(Promise.resolve().then(() => config.fetch(request.url, init)), signal);
-  } catch (error) {
-    if (error === ABORTED || signal.aborted) throw ABORTED;
-    throw new ConnectionError(`${op.id}: request failed (${errorName(error)})`, context);
-  }
-  try {
-    return await race(readResponse(op, response, context), signal);
-  } catch (error) {
-    if (error === ABORTED || signal.aborted) throw ABORTED;
-    if (error instanceof GatherDealError) throw error;
-    throw new ConnectionError(`${op.id}: reading the response failed (${errorName(error)})`, context);
-  }
-}
-
-function idempotencyKeyOf(op: AnyOperation, options: CallOptions): string | undefined {
-  const key = options.idempotencyKey;
-  if (key === undefined) return op.idempotency === "keyed" ? randomId() : undefined;
-  if (op.idempotency !== "keyed") throw new TypeError(`${op.id}: idempotencyKey applies to keyed writes only`);
-  if (!isHeaderToken(key) || key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
-    throw new TypeError(
-      `${op.id}: idempotencyKey must be 1 to ${MAX_IDEMPOTENCY_KEY_LENGTH} visible ASCII characters without spaces`,
-    );
-  }
-  return key;
-}
-
-/**
- * Calls op once from the caller's view: serializes the request once, then
- * makes up to 1 + retries attempts with the same URL, headers, body and
- * Idempotency-Key. Backoff retries and the token refresh share that budget,
- * and one deadline of timeoutMs covers the whole call.
- */
-export async function invoke(
-  config: TransportConfig,
-  op: AnyOperation,
-  problems: ProblemTable,
-  baseUrl: string,
-  input: Readonly<Record<string, unknown>>,
-  options: CallOptions = {},
-): Promise<unknown> {
-  const callerSignal = options.signal;
-  if (callerSignal?.aborted) throw callerSignal.reason;
-  const retries = options.retries ?? config.retries;
-  checkRetries(retries, op.id);
-  const timeoutMs = options.timeoutMs ?? config.timeoutMs;
-  checkTimeout(timeoutMs, op.id);
-  const idempotencyKey = idempotencyKeyOf(op, options);
-  const serialized = serializeRequest(op, input, baseUrl);
-  const request: SerializedRequest =
-    idempotencyKey === undefined
-      ? serialized
-      : { ...serialized, headers: { ...serialized.headers, "Idempotency-Key": idempotencyKey } };
-  const maxAttempts = 1 + retries;
-  const deadline = Date.now() + timeoutMs;
-  const credential = config.credential;
-
-  const controller = new AbortController();
-  const signal = controller.signal;
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  const onCallerAbort = () => controller.abort();
-  callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
-
-  let n = 0;
-  const context = (): ErrorContext => ({ operation: op.id, idempotencyKey, attempt: n === 0 ? undefined : n });
-  try {
-    let bearer: string | undefined;
-    if (credential.kind === "apiKey") bearer = credential.apiKey;
-    if (credential.kind === "token") bearer = await acquireToken(credential.token, signal, context());
-    let refreshed = false;
-    for (;;) {
-      n++;
-      try {
-        return await attempt(config, op, request, bearer, signal, context());
-      } catch (error) {
-        if (error === ABORTED || n >= maxAttempts) throw error;
-        if (
-          credential.kind === "token" &&
-          !refreshed &&
-          isUnauthorized(error) &&
-          (op.idempotency === "safe" || n === 1)
-        ) {
-          refreshed = true;
-          bearer = await acquireToken(credential.token, signal, context());
-          continue;
-        }
-        if (op.idempotency === "none" || !isRetryable(error, problems)) throw error;
-        const delay = retryDelay(error, n);
-        if (delay > RETRY_AFTER_MAX_MS || Date.now() + delay >= deadline) throw error;
-        try {
-          await sleep(delay, signal);
-        } catch {
-          throw ABORTED;
-        }
-      }
-    }
-  } catch (error) {
-    if (callerSignal?.aborted) throw callerSignal.reason;
-    if (timedOut || error === ABORTED) {
-      throw new TimeoutError(`${op.id}: call timed out after ${timeoutMs} ms`, context());
-    }
+    // The observed 4xx already establishes that the server refused the request.
+    if (metadata.status >= 400 && metadata.status < 500 && !signal.aborted) return "";
     throw error;
-  } finally {
-    clearTimeout(timer);
-    callerSignal?.removeEventListener("abort", onCallerAbort);
+  }
+}
+
+export async function invoke<T>(
+  config: TransportConfig,
+  op: Operation,
+  problems: ProblemTable,
+  request: SerializedRequest,
+  options: TransportOptions,
+  transform: (data: unknown, invalid: (message: string) => InvalidResponseError) => T,
+): Promise<Execution<T>> {
+  const callerSignal = options.signal;
+  checkCallerAbort({ operation: op.id, attempt: 1 }, callerSignal);
+  const maxRetries = options.maxRetries ?? config.maxRetries;
+  const timeout = options.timeout ?? config.timeout;
+  checkRetries(maxRetries, op.id);
+  checkTimeout(timeout, op.id);
+  const idempotencyKey = idempotencyKeyOf(op, options.idempotencyKey);
+  const ifMatch = options.ifMatch;
+  if (op.conditional !== undefined && (typeof ifMatch !== "string" || ifMatch.trim() === "")) {
+    throw new TypeError(`${op.id}: ifMatch is required`);
+  }
+  if (op.conditional === undefined && ifMatch !== undefined) {
+    throw new TypeError(`${op.id}: ifMatch applies to conditional writes only`);
+  }
+
+  const headers = new Headers(config.requestHeaders?.(options));
+  if (!headers.has("Accept")) headers.set("Accept", "application/json, application/problem+json");
+  for (const [name, value] of Object.entries(request.headers)) headers.set(name, value);
+  if (idempotencyKey !== undefined) headers.set("Idempotency-Key", idempotencyKey);
+  if (ifMatch !== undefined) headers.set("If-Match", ifMatch);
+
+  let authorization = config.authorization;
+  let refreshed = false;
+  for (let attempt = 1; ; attempt++) {
+    const context = { operation: op.id, idempotencyKey, attempt };
+    checkCallerAbort(context, callerSignal);
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const timer = setTimeout(() => controller.abort(), timeout);
+    const onCallerAbort = () => controller.abort();
+    callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+
+    let dispatched = false;
+    let metadata: ResponseMetadata | undefined;
+    let failed: unknown;
+    try {
+      if (authorization === undefined && config.accessToken !== undefined) {
+        const token = await race(Promise.resolve(config.accessToken()), signal);
+        if (!isHeaderToken(token)) throw new TypeError("accessToken provider returned an unusable token");
+        authorization = `Bearer ${token}`;
+      }
+      if (signal.aborted) throw ABORTED;
+      const attemptHeaders = new Headers(headers);
+      if (authorization !== undefined) attemptHeaders.set("Authorization", authorization);
+      const init: RequestInit = {
+        method: request.method, headers: attemptHeaders, redirect: "manual", credentials: "omit", signal,
+      };
+      if (request.body !== undefined) init.body = request.body;
+      dispatched = true;
+      const raw = await race(config.fetch(request.url, init), signal);
+      const observed = responseMetadata(raw);
+      metadata = observed;
+      const invalid = (message: string) => new InvalidResponseError(message, observed, context);
+      if (raw.status === 0 || raw.redirected || raw.type === "opaqueredirect" || (raw.status >= 300 && raw.status < 400)) {
+        // Cancellation is best effort. The redirect has already been refused.
+        void raw.body?.cancel().catch(() => undefined);
+        throw invalid("redirect refused");
+      }
+      const text = await bodyText(raw, metadata, signal);
+      if (raw.status < 200 || raw.status >= 300) throw failure(metadata, text, context);
+
+      const response = { ...metadata, statusText: raw.statusText, text };
+      return { data: transform(success(op, response, invalid), invalid), response };
+    } catch (error) {
+      if (callerSignal?.aborted) failed = userAbort(context, callerSignal);
+      else if (signal.aborted) failed = new APIConnectionTimeoutError(`${op.id}: attempt timed out after ${timeout} ms`, context);
+      else if (error instanceof APIError || error instanceof InvalidResponseError) failed = error;
+      else failed = new APIConnectionError(`${op.id}: ${dispatched ? "request did not complete" : "access token acquisition failed"}`, context, { cause: error });
+    } finally {
+      clearTimeout(timer);
+      callerSignal?.removeEventListener("abort", onCallerAbort);
+    }
+
+    if (!dispatched) throw failed;
+    const definiteRefusal = metadata !== undefined && metadata.status >= 400 && metadata.status < 500 &&
+      !(failed instanceof InvalidResponseError);
+    if (ifMatch !== undefined && op.conditional !== undefined && idempotencyKey === undefined && !definiteRefusal) {
+      const cause = failed instanceof APIUserAbortError ? failed.cause : failed;
+      throw new OutcomeUnknownError(ifMatch, op.conditional.read, metadata, context, cause);
+    }
+    if (failed instanceof APIUserAbortError) throw failed;
+
+    if (failed instanceof APIError && failed.status === 401 && config.accessToken !== undefined && !refreshed && attempt <= maxRetries) {
+      refreshed = true;
+      authorization = undefined;
+      continue;
+    }
+    if (op.method !== "GET" && op.idempotency !== "keyed") throw failed;
+    if (attempt > maxRetries || !isRetryable(failed, problems)) throw failed;
+    const delay = retryDelay(failed, attempt);
+    if (delay > 60_000) throw failed;
+    try {
+      await sleep(delay, callerSignal);
+    } catch {
+      checkCallerAbort(context, callerSignal);
+      throw failed;
+    }
   }
 }
