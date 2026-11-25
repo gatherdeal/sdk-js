@@ -25,11 +25,11 @@ export type ProblemTable = Readonly<Record<string, ProblemInfo>>;
 
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
 const MAX_TIMEOUT = 2_147_483_647;
-const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
+export const MAX_KEY_LENGTH = 128;
 const ABORTED = Symbol("aborted");
 
 export function isHeaderToken(value: unknown): value is string {
-  return typeof value === "string" && /^[\x21-\x7e]+$/.test(value);
+  return typeof value === "string" && value.length > 0 && !/[^\x21-\x7e]/.test(value);
 }
 
 export function checkRetries(value: number, where: string): void {
@@ -47,8 +47,8 @@ export function checkTimeout(value: number, where: string): void {
 function idempotencyKeyOf(op: Operation, key?: string): string | undefined {
   if (key === undefined) return op.idempotency === "keyed" ? randomId() : undefined;
   if (op.idempotency !== "keyed") throw new TypeError(`${op.id}: idempotencyKey applies to keyed writes only`);
-  if (!isHeaderToken(key) || key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
-    throw new TypeError(`${op.id}: idempotencyKey must be 1 to ${MAX_IDEMPOTENCY_KEY_LENGTH} visible ASCII characters without spaces`);
+  if (!isHeaderToken(key) || key.length > MAX_KEY_LENGTH) {
+    throw new TypeError(`${op.id}: idempotencyKey must be 1 to ${MAX_KEY_LENGTH} visible ASCII characters without spaces`);
   }
   return key;
 }

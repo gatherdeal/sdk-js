@@ -19,7 +19,7 @@ it("encodes a parent path, an item path and a positional command", async () => {
 it("refuses empty or dot-segment paths and malformed idempotency keys before sending", async () => {
   const f = setup(0, []);
   for (const id of ["", ".", ".."]) await assert.rejects(f.method(broadcastsStart)(id), /must not be empty/);
-  for (const key of ["", "a b", "ключ", "x".repeat(256)]) {
+  for (const key of ["", "a b", "ключ", "x".repeat(129), "x\n"]) {
     await assert.rejects(f.method(contactsCreate)({ kind: "personal", name: "Test" }, { idempotencyKey: key }), /idempotencyKey must be/);
   }
   assert.equal(f.calls.length, 0);
