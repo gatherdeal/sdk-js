@@ -141,7 +141,7 @@ jobs:
     environment: release
     permissions:
       contents: read
-      id-token: write # npm trusted publishing with provenance
+      id-token: write # npm provenance statements
     env:
       DIGEST: ${{ needs.pack.outputs.digest }}
       DIST_TAG: ${{ needs.pack.outputs.dist-tag }}
@@ -156,6 +156,8 @@ jobs:
           path: ${{ runner.temp }}/artifact
       - name: publish the tested tarball
         working-directory: ${{ runner.temp }}/artifact
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           echo "$DIGEST  $TARBALL" | sha256sum -c
           npm publish "./$TARBALL" --provenance --access public --ignore-scripts --tag "$DIST_TAG"
