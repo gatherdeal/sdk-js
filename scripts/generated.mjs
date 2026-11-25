@@ -6,11 +6,12 @@
 //     Offline: every file under src/generated matches the lock (path, size,
 //     sha256), the lock's set hash matches its file list, and every public id
 //     is defined by its service's operations module.
-//   node scripts/generated.mjs sync [--out <file>]
+//   node scripts/generated.mjs sync [--from-dir <dir>] [--out <file>]
 //     Fetches the published index. When it differs from the lock, fetches
 //     every file of the set, verifies it, then replaces src/generated and the
 //     lock. Writes a summary (title, body, changed) as JSON to --out. A missing
 //     index (404) is a no-op; any verification failure changes nothing.
+//     --from-dir reads and verifies a local generated set instead.
 //   node scripts/generated.mjs verify-remote
 //     Fetches the locked set by its immutable URL and compares every file byte
 //     for byte with src/generated.
@@ -28,7 +29,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GENERATED = join(ROOT, "src", "generated");
 const LOCK = join(ROOT, "generated.lock.json");
 const DEFAULT_BASE = "https://docs.gatherdeal.ai/sdk/js";
-const PATH_PATTERN = /^(?:[a-z0-9_-]+\/)*[a-z0-9_-]+(?:\.[a-z0-9_-]+)*\.ts$/;
+const PATH_PATTERN = /^(?:operation\.ts|[a-z0-9_]+\/v[0-9]+\/(?:types|operations|errors|index)\.ts)$/;
+const SERVICE_FILES = ["types.ts", "operations.ts", "errors.ts", "index.ts"];
 const SET_PATTERN = /^sha256:([0-9a-f]{64})$/;
 const HEX_PATTERN = /^[0-9a-f]{64}$/;
 const ID_PATTERN = /^[a-z0-9_]+(?:\.[a-z0-9_]+)+$/;
@@ -90,6 +92,7 @@ function validateIndex(index) {
   if (setHash(index.files) !== index.set) fail("set hash does not match the file list");
   const paths = new Set(index.files.map((f) => f.path));
   const services = new Set();
+  const expected = new Set(["operation.ts"]);
   const ids = new Set();
   for (const s of index.services) {
     exactKeys(s, SERVICE_KEYS, "service entry");
@@ -108,8 +111,10 @@ function validateIndex(index) {
       if (ids.has(id)) fail(`duplicate public id ${id}`);
       ids.add(id);
     }
-    if (!paths.has(`${s.service}/${s.version}/operations.ts`)) fail(`missing operations of ${s.service}`);
+    for (const file of SERVICE_FILES) expected.add(`${s.service}/${s.version}/${file}`);
   }
+  for (const path of expected) if (!paths.has(path)) fail(`missing ${path}`);
+  for (const path of paths) if (!expected.has(path)) fail(`unexpected file ${path}`);
   return index;
 }
 
@@ -144,9 +149,9 @@ async function listFiles(dir) {
   if (!(await lstat(dir)).isDirectory()) fail(`${relative(ROOT, dir)} is not a directory`);
   const out = [];
   for (const entry of await readdir(dir, { withFileTypes: true, recursive: true })) {
-    const path = relative(GENERATED, join(entry.parentPath, entry.name)).split(sep).join("/");
+    const path = relative(dir, join(entry.parentPath, entry.name)).split(sep).join("/");
     if (entry.isDirectory()) continue;
-    if (!entry.isFile()) fail(`src/generated/${path} is not a regular file`);
+    if (!entry.isFile()) fail(`${path} is not a regular file`);
     out.push(path);
   }
   return out.sort();
@@ -166,13 +171,7 @@ async function check() {
   if (JSON.stringify(local) !== JSON.stringify(locked)) {
     fail(`src/generated differs from the lock: have ${local.join(", ")}`);
   }
-  const contents = new Map();
-  for (const f of lock.files) {
-    const bytes = await readFile(join(GENERATED, f.path));
-    if (bytes.length !== f.size || sha256(bytes) !== f.sha256) fail(`${f.path} does not match the lock`);
-    contents.set(f.path, bytes);
-  }
-  checkPublicIds(lock, (path) => contents.get(path));
+  await readSet(lock, (path) => readLocalFile(GENERATED, path));
   console.log(`src/generated matches ${lock.set}`);
 }
 
@@ -195,18 +194,52 @@ async function fetchBytes(url, limit) {
   return { status: response.status, bytes: Buffer.concat(chunks) };
 }
 
-async function fetchSet(index) {
-  const hex = SET_PATTERN.exec(index.set)[1];
+async function readSet(index, load) {
   const files = new Map();
   for (const f of index.files) {
-    const { status, bytes } = await fetchBytes(`${base()}/sets/${hex}/${f.path}`, f.size);
-    if (bytes === undefined) fail(`${f.path}: HTTP ${status}`);
+    const bytes = await load(f.path, f.size);
     if (bytes.length !== f.size) fail(`${f.path}: size ${bytes.length}, want ${f.size}`);
     if (sha256(bytes) !== f.sha256) fail(`${f.path}: sha256 mismatch`);
     files.set(f.path, bytes);
   }
   checkPublicIds(index, (path) => files.get(path));
   return files;
+}
+
+async function readLocalFile(dir, path, limit = MAX_FILE_BYTES) {
+  const filename = join(dir, path);
+  const stat = await lstat(filename);
+  if (!stat.isFile()) fail(`${path} is not a regular file`);
+  if (stat.size > limit) fail(`${path}: body exceeds ${limit} bytes`);
+  return readFile(filename);
+}
+
+function fetchSet(index) {
+  const hex = SET_PATTERN.exec(index.set)[1];
+  return readSet(index, async (path, size) => {
+    const { status, bytes } = await fetchBytes(`${base()}/sets/${hex}/${path}`, size);
+    if (bytes === undefined) fail(`${path}: HTTP ${status}`);
+    return bytes;
+  });
+}
+
+async function localSet(dir) {
+  const paths = await listFiles(dir);
+  const bytes = await readLocalFile(dir, "index.json", MAX_INDEX_BYTES);
+  const index = validateIndex(JSON.parse(bytes.toString("utf8")));
+  const allowed = ["index.json", ...index.files.map((f) => f.path)].sort();
+  if (JSON.stringify(paths) !== JSON.stringify(allowed)) fail("local directory differs from index.json");
+  const files = await readSet(index, (path, size) => readLocalFile(dir, path, size));
+  return { index, files };
+}
+
+async function remoteSet(lock) {
+  const { status, bytes } = await fetchBytes(`${base()}/index.json`, MAX_INDEX_BYTES);
+  if (status === 404) return undefined;
+  if (bytes === undefined) fail(`index.json: HTTP ${status}`);
+  const index = validateIndex(JSON.parse(bytes.toString("utf8")));
+  const files = canonical(index) === canonical(lock) ? undefined : await fetchSet(index);
+  return { index, files };
 }
 
 function publicIds(index) {
@@ -245,32 +278,26 @@ function summarize(before, after) {
   return { title, body: lines.join("\n"), needsReview };
 }
 
-async function sync(out) {
+async function sync(out, fromDir) {
   const result = { changed: false, title: "", body: "", needsReview: false };
   const lock = await readLock();
-  const { status, bytes } = await fetchBytes(`${base()}/index.json`, MAX_INDEX_BYTES);
-  if (status === 404) {
+  const set = fromDir === undefined ? await remoteSet(lock) : await localSet(fromDir);
+  if (set === undefined) {
     console.log("no published index; nothing to do");
-  } else if (bytes === undefined) {
-    fail(`index.json: HTTP ${status}`);
+  } else if (canonical(set.index) === canonical(lock)) {
+    console.log(`up to date at ${lock.set}`);
   } else {
-    const index = validateIndex(JSON.parse(bytes.toString("utf8")));
-    if (canonical(index) === canonical(lock)) {
-      console.log(`up to date at ${lock.set}`);
-    } else {
-      const files = await fetchSet(index);
-      const staging = join(ROOT, "src", ".generated-staging");
-      await rm(staging, { recursive: true, force: true });
-      for (const [path, content] of files) {
-        await mkdir(dirname(join(staging, path)), { recursive: true });
-        await writeFile(join(staging, path), content);
-      }
-      await rm(GENERATED, { recursive: true, force: true });
-      await rename(staging, GENERATED);
-      await writeFile(LOCK, canonical(index));
-      Object.assign(result, { changed: true }, summarize(lock, index));
-      console.log(`updated to ${index.set}`);
+    const staging = join(ROOT, "src", ".generated-staging");
+    await rm(staging, { recursive: true, force: true });
+    for (const [path, content] of set.files) {
+      await mkdir(dirname(join(staging, path)), { recursive: true });
+      await writeFile(join(staging, path), content);
     }
+    await rm(GENERATED, { recursive: true, force: true });
+    await rename(staging, GENERATED);
+    await writeFile(LOCK, canonical(set.index));
+    Object.assign(result, { changed: true }, summarize(lock, set.index));
+    console.log(`updated to ${set.index.set}`);
   }
   if (out !== undefined) await writeFile(out, JSON.stringify(result));
 }
@@ -302,19 +329,22 @@ function base() {
 
 function option(name) {
   const i = process.argv.indexOf(name);
-  return i === -1 ? undefined : process.argv[i + 1];
+  if (i === -1) return undefined;
+  const value = process.argv[i + 1];
+  if (value === undefined || value.startsWith("--")) fail(`${name} requires a value`);
+  return value;
 }
 
 const commands = {
   check: () => check(),
-  sync: () => sync(option("--out")),
+  sync: () => sync(option("--out"), option("--from-dir")),
   "verify-remote": () => verifyRemote(),
   notes: () => notes(option("--from")),
 };
 
 const command = commands[process.argv[2]];
 if (command === undefined) {
-  console.error("usage: generated.mjs check | sync [--out file] | verify-remote | notes [--from lock] [--base url]");
+  console.error("usage: generated.mjs check | sync [--from-dir dir] [--out file] | verify-remote | notes [--from lock] [--base url]");
   process.exit(2);
 }
 try {
