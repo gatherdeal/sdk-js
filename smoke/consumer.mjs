@@ -1,6 +1,8 @@
 // Runs against the installed package in Node, Bun and Deno.
 import { InternalServerError, InvalidResponseError, NotFoundError, createClient, isAPIError } from "@gatherdeal/sdk";
+import * as crm from "@gatherdeal/sdk/crm";
 import * as identity from "@gatherdeal/sdk/identity";
+import * as whatsapp from "@gatherdeal/sdk/whatsapp";
 
 function check(condition, message) {
   if (!condition) throw new Error(`smoke: ${message}`);
@@ -39,7 +41,7 @@ async function serve(handler) {
   return { url: `http://127.0.0.1:${server.address().port}`, close: () => server.close() };
 }
 
-check(identity.service.name === "identity", "identity subpath");
+check(crm.service.name === "crm" && identity.service.name === "identity" && whatsapp.service.name === "whatsapp", "service subpaths");
 check(identity.problems.IDENTITY_OUTLET_NOT_FOUND.status === 404, "problem table");
 
 {

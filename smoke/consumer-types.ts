@@ -1,9 +1,14 @@
 // Type-checked against the installed package with strict settings.
 import { createClient, isAPIError, type Client } from "@gatherdeal/sdk";
+import type { DealUpdateResponse } from "@gatherdeal/sdk/crm";
+import type { ChatMessageFeedListResponse } from "@gatherdeal/sdk/whatsapp";
 import type { Outlet, OutletListParams, ProblemDetails } from "@gatherdeal/sdk/identity";
 
 export async function consumer(token: () => Promise<string>): Promise<string[]> {
   const client: Client = createClient({ token });
+  const update: DealUpdateResponse = await client.crm.deals.update("d1", { remark: "Updated" }, { ifMatch: '"r1"' });
+  const feed: ChatMessageFeedListResponse = await client.whatsapp.chatMessages.list({ after_rev: 0 });
+  void [update.revision, feed.after_rev];
   const outlet: Outlet = await client.identity.outlets.get("o1");
   try {
     await client.identity.outlets.list({ limit: 10 });

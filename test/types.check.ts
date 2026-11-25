@@ -1,11 +1,10 @@
 // Compile-time checks only.
-import { bindOperation, type Binding } from "../src/bind.js";
 import { createClient, type APIPromise, type Page, type PagePromise } from "../src/index.js";
 import type { Outlet } from "../src/identity.js";
-import { broadcastsRecipientsRemove, itemsCreate, itemsUpdate } from "./fixtures/operations/operations.js";
+import type { ChatMessageFeedListResponse } from "../src/whatsapp.js";
 
-export async function checks(binding: Binding, error: unknown): Promise<void> {
-  const { identity } = createClient();
+export async function checks(error: unknown): Promise<void> {
+  const { crm, identity, whatsapp } = createClient();
   const call: APIPromise<Outlet> = identity.outlets.get("o1", { with_owner: true }, { maxRetries: 0 });
   const outlet: Outlet = (await call.withResponse()).data;
   const pending: PagePromise<Outlet> = identity.outlets.list({ limit: 2 });
@@ -27,12 +26,12 @@ export async function checks(binding: Binding, error: unknown): Promise<void> {
     void reason;
   }
 
-  const create = bindOperation(itemsCreate, binding);
-  const id: string = (await create({ content: { kind: "text", text: "Item" } }, { idempotencyKey: "key" })).id;
-  await bindOperation(broadcastsRecipientsRemove, binding)(id, { broadcast_id: id });
-  const update = bindOperation(itemsUpdate, binding);
-  await update(outlet.id, undefined, { ifMatch: '"r1"' });
+  const id: string = (await crm.contacts.create({ kind: "personal", name: "Test" }, { idempotencyKey: "key" })).id;
+  await whatsapp.broadcasts.recipients.remove(id, { broadcast_id: "b1" });
+  await crm.deals.update("d1", { remark: "Updated" }, { ifMatch: '"r1"' });
   // @ts-expect-error If-Match is required
-  void update(id);
-  void page;
+  void crm.deals.update("d1", { remark: "Updated" });
+  const feed: ChatMessageFeedListResponse = await whatsapp.chatMessages.list({ after_rev: 1 });
+  const messages = await whatsapp.chats.messages.list({ chat_id: "c1" });
+  void [outlet, page, feed.after_rev, messages.data];
 }
