@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, rmSync, symlinkSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -37,9 +38,13 @@ function publishLockedSet(): void {
   for (const f of lock.files) routes.set(`/sets/${hex}/${f.path}`, readFileSync(`${root}src/generated/${f.path}`));
 }
 
-async function run(...args: string[]): Promise<{ code: number; out: string }> {
+function run(...args: string[]) {
+  return runAt(script, ...args);
+}
+
+async function runAt(command: string, ...args: string[]): Promise<{ code: number; out: string }> {
   try {
-    const { stdout, stderr } = await promisify(execFile)(process.execPath, [script, ...args, "--base", base]);
+    const { stdout, stderr } = await promisify(execFile)(process.execPath, [command, ...args, "--base", base]);
     return { code: 0, out: stdout + stderr };
   } catch (error) {
     const e = error as { code: number; stdout: string; stderr: string };
@@ -138,6 +143,55 @@ describe("generated.mjs", () => {
       assert.match(result.out, /not a regular file/);
     } finally {
       rmSync(link);
+    }
+  });
+});
+
+describe("local generated sync", () => {
+  it("installs a verified set and rejects extra files, corrupt bytes and mismatched set hashes", async () => {
+    const temporary = mkdtempSync(join(root, "build", "generated-sync-"));
+    try {
+      const input = join(temporary, "input");
+      const repo = join(temporary, "repo");
+      const copy = join(repo, "scripts", "generated.mjs");
+      mkdirSync(dirname(copy), { recursive: true });
+      copyFileSync(script, copy);
+      writeFileSync(join(repo, "generated.lock.json"), lockBytes);
+
+      const index = JSON.parse(lockBytes.toString("utf8")) as typeof lock;
+      const changed = Buffer.concat([readFileSync(join(root, "src/generated/operation.ts")), Buffer.from("\n")]);
+      for (const file of index.files) {
+        const destination = join(input, file.path);
+        mkdirSync(dirname(destination), { recursive: true });
+        if (file.path === "operation.ts") {
+          file.sha256 = createHash("sha256").update(changed).digest("hex");
+          file.size = changed.length;
+          writeFileSync(destination, changed);
+        } else {
+          copyFileSync(join(root, "src/generated", file.path), destination);
+        }
+      }
+      index.set = `sha256:${createHash("sha256").update(JSON.stringify(index.files)).digest("hex")}`;
+      const indexPath = join(input, "index.json");
+      writeFileSync(indexPath, JSON.stringify(index));
+      const result = await runAt(copy, "sync", "--from-dir", input);
+      assert.equal(result.code, 0, result.out);
+      assert.match(result.out, /updated to sha256:/);
+      assert.equal((await runAt(copy, "check")).code, 0);
+      assert.deepEqual(readFileSync(join(repo, "src/generated/operation.ts")), changed);
+
+      const extra = join(input, "extra.ts");
+      writeFileSync(extra, "export {};\n");
+      assert.match((await runAt(copy, "sync", "--from-dir", input)).out, /local directory differs/);
+      rmSync(extra);
+      writeFileSync(join(input, "operation.ts"), Buffer.concat([changed.subarray(0, -1), Buffer.from(" ")]));
+      assert.match((await runAt(copy, "sync", "--from-dir", input)).out, /sha256 mismatch/);
+      index.files[0]!.size += 1;
+      writeFileSync(indexPath, JSON.stringify(index));
+      assert.match((await runAt(copy, "sync", "--from-dir", input)).out, /set hash does not match/);
+      assert.equal((await runAt(copy, "check")).code, 0);
+    } finally {
+      rmSync(temporary, { force: true, recursive: true });
     }
   });
 });

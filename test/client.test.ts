@@ -1,204 +1,120 @@
 import assert from "node:assert/strict";
-import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
-import { after, describe, it } from "node:test";
-import { problems as crmProblems, service as crmService } from "../src/crm.js";
-import { ApiError, ProtocolError, createClient, paginate } from "../src/index.js";
-import { fakeFetch, json, problem, rejection } from "./helpers.js";
+import { describe, it } from "node:test";
+import { InvalidResponseError, createClient } from "../src/index.js";
+import { fakeFetch, rejection, reply } from "./helpers.js";
 
-function withGlobal<T>(name: string, value: unknown, run: () => T): T {
-  const previous = Object.getOwnPropertyDescriptor(globalThis, name);
-  Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
-  const restore = () => {
-    if (previous === undefined) delete (globalThis as Record<string, unknown>)[name];
-    else Object.defineProperty(globalThis, name, previous);
-  };
-  let result: T;
-  try {
-    result = run();
-  } catch (error) {
-    restore();
-    throw error;
-  }
-  if (result instanceof Promise) return result.finally(restore) as T;
-  restore();
-  return result;
+function page(ids: string[], fields: object = {}) {
+  return reply(200, { outlets: { data: ids.map((id) => ({ id })), has_next_page: false, has_prev_page: false, page_size: 20, ...fields } });
 }
 
-describe("createClient", () => {
-  it("refuses an API key in a browser unless allowed", () => {
-    withGlobal("document", {}, () => {
-      assert.throws(() => createClient({ apiKey: "k" }), /readable by every visitor/);
-      assert.ok(createClient({ apiKey: "k", dangerouslyAllowBrowser: true }));
-      assert.ok(createClient({ token: () => "t" }));
+async function collect<T>(items: AsyncIterable<T>): Promise<T[]> {
+  const values: T[] = [];
+  for await (const item of items) values.push(item);
+  return values;
+}
+
+for (const maxRetries of [0, 2]) {
+  describe(`result kinds with maxRetries=${maxRetries}`, () => {
+    it("unwraps an outlet resource and shares one execution across response views", async () => {
+      const outlet = { id: "o/1" };
+      const body = { status: "success", outlet };
+      const f = fakeFetch(Response.json(body, { headers: { "X-Correlation-Id": "req-1" }, statusText: "Custom" }));
+      const call = createClient({ fetch: f.fetch }).identity.outlets.get("o/1", undefined, { maxRetries });
+      const [resource, withResponse, raw] = await Promise.all([call, call.withResponse(), call.asResponse()]);
+      assert.deepEqual(resource, outlet);
+      assert.equal(resource, withResponse.data);
+      assert.equal(withResponse.requestID, "req-1");
+      assert.equal(raw.headers.get("X-Correlation-Id"), "req-1");
+      assert.equal(raw.statusText, "Custom");
+      assert.deepEqual(await raw.json(), body);
+      assert.deepEqual(await withResponse.response.json(), body);
+      assert.deepEqual(await (await call.asResponse()).json(), body);
+      assert.equal(f.calls[0]?.url, "https://api.gatherdeal.ai/identity/v1/outlets/o%2F1");
+      assert.equal(f.calls.length, 1);
     });
-    withGlobal("importScripts", () => undefined, () => {
-      assert.throws(() => createClient({ apiKey: "k" }), /readable by every visitor/);
+
+    it("rejects an unexpected success status or envelope marker", async () => {
+      for (const response of [reply(202, { outlet: {} }), Response.json({ status: "error", outlet: {} })]) {
+        const f = fakeFetch(response);
+        assert.ok(await rejection(createClient({ fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries })) instanceof InvalidResponseError);
+        assert.equal(f.calls.length, 1);
+      }
     });
-    assert.ok(createClient({ apiKey: "k" }));
   });
 
-  it("refuses both credentials and an unusable key", () => {
-    assert.throws(() => createClient({ apiKey: "k", token: () => "t" }), /not both/);
-    assert.throws(() => createClient({ apiKey: "" }), /apiKey must be/);
-    assert.throws(() => createClient({ apiKey: "a b" }), /apiKey must be/);
-  });
+  describe(`pagination with maxRetries=${maxRetries}`, () => {
+    it("stops at a terminal page and shares the first fetch with await, response views and iteration", async () => {
+      const f = fakeFetch(page(["o1"]));
+      const pending = createClient({ fetch: f.fetch }).identity.outlets.list(undefined, { maxRetries });
+      const [first, raw, withResponse, items] = await Promise.all([pending, pending.asResponse(), pending.withResponse(), collect(pending)]);
+      assert.deepEqual(items, [{ id: "o1" }]);
+      assert.equal(first.hasNextPage(), false);
+      assert.equal(first, withResponse.data);
+      assert.equal(raw.status, 200);
+      assert.deepEqual(await collect(first.iterPages()), [first]);
+      await assert.rejects(first.getNextPage(), /no next page/);
+      assert.equal(f.calls.length, 1);
+    });
 
-  it("validates retries and timeoutMs", async () => {
-    for (const retries of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5]) {
-      assert.throws(() => createClient({ retries }), /retries must be a non-negative integer/);
-      await assert.rejects(createClient({ fetch: fakeFetch().fetch }).crm.contacts.list({}, { retries }), /retries must be/);
+    it("continues from implicit numbered page one and shares getNextPage with iteration", async () => {
+      const f = fakeFetch(page(["o1"], { has_next_page: true, page: 1 }), page(["o2"], { page: 2 }));
+      const pending = createClient({ fetch: f.fetch }).identity.outlets.list({ q: "Tan" }, { maxRetries });
+      const first = await pending;
+      assert.equal(f.calls.length, 1);
+      const [second, pages] = await Promise.all([first.getNextPage(), collect(first.iterPages())]);
+      assert.deepEqual(pages, [first, second]);
+      assert.deepEqual(await collect(pending), [{ id: "o1" }, { id: "o2" }]);
+      assert.equal(new URL(f.calls[0]!.url).searchParams.has("page"), false);
+      assert.equal(new URL(f.calls[1]!.url).searchParams.get("page"), "2");
+      assert.equal(new URL(f.calls[1]!.url).searchParams.get("q"), "Tan");
+      assert.equal(f.calls.length, 2);
+    });
+
+    for (const params of [{ page: 3 }, { before: "prior" }]) {
+      it(`follows a cursor and drops the ${Object.keys(params)[0]} selector`, async () => {
+        const f = fakeFetch(page(["o1"], { has_next_page: true, next_cursor: "resume" }), page(["o2"]));
+        const call = createClient({ fetch: f.fetch }).identity.outlets.list({ ...params, limit: 10, sort: "name" }, { maxRetries });
+        assert.deepEqual(await collect(call), [{ id: "o1" }, { id: "o2" }]);
+        assert.deepEqual(Object.fromEntries(new URL(f.calls[1]!.url).searchParams), { limit: "10", sort: "name", after: "resume" });
+        assert.equal(f.calls.length, 2);
+      });
     }
-    for (const timeoutMs of [0, -5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31]) {
-      assert.throws(() => createClient({ timeoutMs }), /timeoutMs must be/);
-    }
-  });
 
-  it("freezes descriptors and service metadata", () => {
-    const c = createClient({ apiKey: "k" });
-    const op = c.crm.contacts.list.operation as unknown as { idempotency: string; parameters: { encoding: string }[] };
-    assert.throws(() => {
-      op.idempotency = "keyed";
-    }, TypeError);
-    assert.throws(() => {
-      op.parameters[0]!.encoding = "json";
-    }, TypeError);
-    assert.ok(Object.isFrozen(crmService) && Object.isFrozen(crmProblems.PRECONDITION_FAILED));
-    assert.ok(Object.isFrozen(c.crm.contacts));
-  });
-
-  it("sends no Authorization header without a credential", async () => {
-    const f = fakeFetch(
-      json(200, { status: "success", outlets: { data: [], has_next_page: false, has_prev_page: false, page_size: 20 } }),
-    );
-    await createClient({ fetch: f.fetch }).identity.outlets.list();
-    assert.equal(f.calls[0]!.headers.has("Authorization"), false);
-    assert.equal(f.calls[0]!.url, "https://api.gatherdeal.ai/identity/v1/outlets");
-  });
-
-  it("calls globalThis.fetch at call time when no fetch is given", async () => {
-    const f = fakeFetch(json(200, { status: "success", contact: {} }));
-    const c = createClient({ apiKey: "k" });
-    await withGlobal("fetch", f.fetch, () => c.crm.contacts.get({ id: "c1" }));
-    assert.equal(f.calls.length, 1);
-  });
-});
-
-describe("redirects", () => {
-  it("refuses a redirect response without following it", async () => {
-    const f = fakeFetch(new Response(null, { status: 302, headers: { Location: "https://elsewhere.test/" } }));
-    const error = await rejection(createClient({ apiKey: "k", fetch: f.fetch }).crm.contacts.get({ id: "c1" }));
-    assert.ok(error instanceof ProtocolError);
-    assert.match(error.message, /redirect refused/);
-    assert.equal(f.calls.length, 1);
-  });
-
-  it("refuses an opaque redirect", async () => {
-    const opaque = new Response(null, { status: 200 });
-    Object.defineProperty(opaque, "type", { value: "opaqueredirect" });
-    Object.defineProperty(opaque, "status", { value: 0 });
-    const error = await rejection(
-      createClient({ apiKey: "k", fetch: fakeFetch(opaque).fetch }).crm.contacts.get({ id: "c1" }),
-    );
-    assert.ok(error instanceof ProtocolError && error.status === 0);
-  });
-
-  const servers: Server[] = [];
-  after(() => servers.forEach((s) => s.close()));
-  async function listen(handler: Parameters<typeof createServer>[1]): Promise<string> {
-    const server = createServer(handler);
-    servers.push(server);
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  }
-
-  it("never sends credentials to a redirect target with the real fetch", async () => {
-    const seen: string[] = [];
-    const target = await listen((req, res) => {
-      seen.push(String(req.headers.authorization));
-      res.end("{}");
-    });
-    const origin = await listen((_req, res) => {
-      res.writeHead(302, { Location: `${target}/v1/contacts/c1` }).end();
-    });
-    const c = createClient({ apiKey: "secret", baseUrl: { crm: origin }, allowLoopbackHttp: true, retries: 0 });
-    const error = await rejection(c.crm.contacts.get({ id: "c1" }));
-    assert.ok(error instanceof ProtocolError);
-    assert.deepEqual(seen, []);
-  });
-});
-
-describe("pagination", () => {
-  const page = (ids: string[], next?: string) =>
-    json(200, {
-      status: "success",
-      contacts: {
-        data: ids.map((id) => ({ id })),
-        has_next_page: next !== undefined,
-        has_prev_page: false,
-        page_size: 2,
-        ...(next === undefined ? {} : { next_cursor: next }),
-      },
+    it("rejects a repeated resume cursor from the initial selector", async () => {
+      const f = fakeFetch(page(["o1"], { has_next_page: true, next_cursor: "same" }));
+      const call = createClient({ fetch: f.fetch }).identity.outlets.list({ after: "same" }, { maxRetries });
+      const error = await rejection(call);
+      assert.ok(error instanceof InvalidResponseError);
+      assert.match(error.message, /repeated next cursor/);
+      assert.equal(f.calls.length, 1);
     });
 
-  it("follows next_cursor until the last page", async () => {
-    const f = fakeFetch(page(["a", "b"], "n1"), page(["c"]));
-    const c = createClient({ apiKey: "k", fetch: f.fetch });
-    const ids: string[] = [];
-    for await (const contact of paginate(c.crm.contacts.list, { limit: 2, page: 3 })) ids.push(contact.id);
-    assert.deepEqual(ids, ["a", "b", "c"]);
-    const second = new URL(f.calls[1]!.url).searchParams;
-    assert.equal(second.get("after"), "n1");
-    assert.equal(second.get("limit"), "2");
-    assert.equal(second.has("page"), false);
-  });
+    it("carries the seen cursor set into getNextPage", async () => {
+      const f = fakeFetch(page(["o1"], { has_next_page: true, next_cursor: "new" }), page(["o2"], { has_next_page: true, next_cursor: "old" }));
+      const first = await createClient({ fetch: f.fetch }).identity.outlets.list({ after: "old" }, { maxRetries });
+      assert.equal(f.calls.length, 1);
+      const error = await rejection(first.getNextPage());
+      assert.ok(error instanceof InvalidResponseError);
+      assert.match(error.message, /repeated next cursor/);
+      assert.equal(f.calls.length, 2);
+    });
 
-  it("stops on a repeated cursor", async () => {
-    const f = fakeFetch(page(["a"], "n1"), page(["b"], "n1"));
-    const c = createClient({ apiKey: "k", fetch: f.fetch });
-    await assert.rejects(async () => {
-      for await (const _ of paginate(c.crm.contacts.list, {})) void _;
-    }, /repeated a page cursor/);
-  });
+    it("rejects a missing cursor in cursor mode, even if a page number was sent back", async () => {
+      const f = fakeFetch(page(["o1"], { has_next_page: true, page: 2 }));
+      const error = await rejection(createClient({ fetch: f.fetch }).identity.outlets.list({ after: "old" }, { maxRetries }));
+      assert.ok(error instanceof InvalidResponseError);
+      assert.match(error.message, /missing a cursor/);
+      assert.equal(f.calls.length, 1);
+    });
 
-  it("throws ProtocolError before yielding a malformed page", async () => {
-    const pages = [
-      json(200, { status: "success", contacts: { data: [{ id: "a" }], has_next_page: true, has_prev_page: false, page_size: 1 } }),
-      json(200, { status: "success", contacts: { has_next_page: false, has_prev_page: false, page_size: 1 } }),
-      json(200, { status: "success", contacts: { data: [{ id: "a" }], has_prev_page: false, page_size: 1 } }),
-    ];
-    for (const response of pages) {
-      const c = createClient({ apiKey: "k", fetch: fakeFetch(response).fetch });
-      const seen: string[] = [];
-      const error = await rejection(
-        (async () => {
-          for await (const contact of paginate(c.crm.contacts.list, {})) seen.push(contact.id);
-        })(),
-      );
-      assert.ok(error instanceof ProtocolError, String(error));
-      assert.deepEqual(seen, []);
-    }
-  });
+    it("rejects missing item arrays and non-boolean continuation flags", async () => {
+      for (const body of [{ has_next_page: false }, { data: [], has_next_page: "false" }]) {
+        const f = fakeFetch(reply(200, { outlets: body }));
+        assert.ok(await rejection(createClient({ fetch: f.fetch }).identity.outlets.list(undefined, { maxRetries })) instanceof InvalidResponseError);
+        assert.equal(f.calls.length, 1);
+      }
+    });
 
-  it("refuses an operation without pagination", async () => {
-    const c = createClient({ apiKey: "k", fetch: fakeFetch().fetch });
-    await assert.rejects(async () => {
-      for await (const _ of paginate(c.crm.contacts.get as never, {})) void _;
-    }, /not a paginated operation/);
-  });
-});
 
-describe("conditional write", () => {
-  it("passes the revision from a read to If-Match and surfaces 412", async () => {
-    const f = fakeFetch(
-      json(200, { status: "success", deal: { id: "d1", revision: "W/rev-7" } }),
-      problem(412, "PRECONDITION_FAILED"),
-    );
-    const c = createClient({ apiKey: "k", fetch: f.fetch });
-    const { deal } = await c.crm.deals.get({ id: "d1" });
-    const error = await rejection(c.crm.deals.update({ id: deal.id, if_match: deal.revision, remark: "x" }));
-    assert.equal(f.calls[1]!.headers.get("If-Match"), "W/rev-7");
-    assert.ok(c.crm.deals.update.isError(error, "PRECONDITION_FAILED"));
-    assert.ok(error instanceof ApiError && error.status === 412);
   });
-});
+}

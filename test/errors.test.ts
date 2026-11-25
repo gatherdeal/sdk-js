@@ -1,14 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, it } from "node:test";
-import {
-  ApiError,
-  ProtocolError,
-  StatusError,
-  createClient,
-  isApiError,
-} from "../src/index.js";
-import { fakeFetch, json, problem, rejection } from "./helpers.js";
+import { APIError, InvalidResponseError, UnprocessableEntityError, createClient, isAPIError } from "../src/index.js";
+import { fakeFetch, problem, rejection } from "./helpers.js";
 
 interface Fixture {
   description: string;
@@ -28,136 +22,99 @@ const fixtures = readdirSync(fixtureDir)
   .filter((name) => name.endsWith(".json"))
   .map((name) => [name, JSON.parse(readFileSync(new URL(name, fixtureDir), "utf8")) as Fixture] as const);
 
-function client(...responses: Response[]) {
-  return createClient({ apiKey: "k", fetch: fakeFetch(...responses).fetch, retries: 0 });
-}
-
 describe("problem conformance", () => {
   for (const [name, fx] of fixtures) {
-    it(`${name}: ${fx.description}`, async () => {
-      const response = new Response(fx.response.body === "" ? null : fx.response.body, {
-        status: fx.response.status,
-        headers: fx.response.headers,
-      });
-      const result = client(response).crm.contacts.get({ id: "c1" });
-      if (fx.expect.kind === "success") {
-        assert.ok(await result);
-        return;
-      }
-      const error = await rejection(result);
-      switch (fx.expect.kind) {
-        case "problem": {
-          assert.ok(error instanceof ApiError, String(error));
-          assert.equal(error.status, fx.expect.status);
+    it(name, async () => {
+      const f = fakeFetch(new Response(fx.response.body, { status: fx.response.status, headers: fx.response.headers }));
+      const call = createClient({ fetch: f.fetch, retries: 0 }).identity.outlets.get("o1");
+      if (fx.expect.kind === "success") assert.deepEqual(await call, { id: "o1" });
+      else {
+        const error = await rejection(call);
+        if (fx.expect.status < 300) assert.ok(error instanceof InvalidResponseError);
+        else {
+          assert.ok(error instanceof APIError);
+          assert.equal(error.requestID, "corr-1");
           assert.equal(error.code, fx.expect.code);
-          assert.equal(error.correlationId, "corr-1");
+          if (fx.expect.kind === "problem") {
+            assert.equal(error.problem?.code, fx.expect.code);
+            assert.deepEqual(error.record, fx.expect.record);
+          } else {
+            assert.equal(error.problem, undefined);
+            assert.equal(error.body, fx.response.body);
+          }
           if (fx.expect.retryable !== undefined) assert.equal(error.retryable, fx.expect.retryable);
           if (fx.expect.retry_after_ms !== undefined) assert.equal(error.retryAfterMs, fx.expect.retry_after_ms);
-          assert.deepEqual(error.record, fx.expect.record);
-          assert.equal(error.raw.code, fx.expect.code);
-          break;
         }
-        case "status":
-          assert.ok(error instanceof StatusError, String(error));
-          assert.equal(error.status, fx.expect.status);
-          assert.equal(error.correlationId, "corr-1");
-          break;
-        case "protocol":
-          assert.ok(error instanceof ProtocolError, String(error));
-          assert.equal(error.status, fx.expect.status);
-          break;
+        assert.equal(error.status, fx.expect.status);
       }
+      assert.equal(f.calls.length, 1);
     });
   }
 });
 
-describe("error fields and guards", () => {
-  it("reads violations, details and the correlation header", async () => {
-    const violations = [
-      { pointer: "#/name", rule: "required", detail: "name is required" },
-      { parameter: { in: "query", name: "limit" }, rule: "max", detail: "too large", params: { max: 100 } },
-    ];
-    const error = await rejection(
-      client(problem(422, "VALIDATION_FAILED", { errors: violations }, { "X-Correlation-Id": "c-9" })).crm.contacts.list(),
-    );
-    assert.ok(error instanceof ApiError);
-    assert.deepEqual(error.violations, violations);
-    assert.equal(error.correlationId, "c-9");
-    assert.equal(error.operation, "crm.contacts.list");
-  });
+for (const maxRetries of [0, 2]) {
+  describe(`HTTP errors with maxRetries=${maxRetries}`, () => {
+    it("uses the status subclass for malformed 422", async () => {
+      const f = fakeFetch(new Response("{", { status: 422, headers: { "Content-Type": "application/problem+json" } }));
+      const error = await rejection(createClient({ fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries }));
+      assert.ok(error instanceof UnprocessableEntityError && isAPIError(error));
+      assert.equal(error.code, undefined);
+      assert.equal(error.problem, undefined);
+      assert.equal(error.body, "{");
+      assert.equal(f.calls.length, 1);
+    });
 
-  it("narrows by operation, code and validated details", async () => {
-    const c = client(
-      problem(422, "CRM_CONTACT_EXPANSION_LIMIT", { details: { expansion: "tags", limit: 5 } }),
-      problem(422, "CRM_CONTACT_EXPANSION_LIMIT", { details: { expansion: "tags", limit: "5" } }),
-      problem(422, "FUTURE_NEW_CODE", { details: { since: "2030" } }),
-    );
-    const good = await rejection(c.crm.contacts.list());
-    assert.ok(c.crm.contacts.list.isError(good, "CRM_CONTACT_EXPANSION_LIMIT"));
-    if (c.crm.contacts.list.isError(good, "CRM_CONTACT_EXPANSION_LIMIT")) {
-      const limit: number = good.details.limit;
-      assert.equal(limit, 5);
+    for (const status of [426, 428]) {
+      it(`uses plain APIError for ${status}`, async () => {
+        const f = fakeFetch(new Response("upgrade", { status }));
+        const error = await rejection(createClient({ fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries }));
+        assert.ok(error instanceof APIError);
+        assert.equal(error.constructor, APIError);
+        assert.equal(error.status, status);
+        assert.equal(f.calls.length, 1);
+      });
     }
-    assert.ok(c.crm.isError(good, "CRM_CONTACT_EXPANSION_LIMIT"));
-    assert.equal(c.crm.deals.list.isError(good), false);
-    assert.equal(c.whatsapp.isError(good), false);
-    assert.ok(isApiError(good, "CRM_CONTACT_EXPANSION_LIMIT"));
 
-    const malformed = await rejection(c.crm.contacts.list());
-    assert.ok(isApiError(malformed, "CRM_CONTACT_EXPANSION_LIMIT"));
-    assert.equal(c.crm.contacts.list.isError(malformed, "CRM_CONTACT_EXPANSION_LIMIT"), false);
-
-    const unknown = await rejection(c.crm.contacts.list());
-    assert.ok(isApiError(unknown, "FUTURE_NEW_CODE"));
-    assert.ok(c.crm.isError(unknown));
-    assert.equal(c.crm.contacts.list.isError(unknown), false);
-    assert.equal(isApiError(new Error("x")), false);
-    assert.equal(isApiError(undefined), false);
-  });
-});
-
-describe("success validation", () => {
-  it("returns the parsed envelope", async () => {
-    const body = { status: "success", contact: { id: "c1" }, extra: 1 };
-    assert.deepEqual(await client(json(200, body)).crm.contacts.get({ id: "c1" }), body);
-  });
-
-  it("rejects a missing required member", async () => {
-    const error = await rejection(client(json(200, { status: "success" })).crm.contacts.get({ id: "c1" }));
-    assert.ok(error instanceof ProtocolError);
-    assert.match(error.message, /lacks "contact"/);
-  });
-
-  it("rejects an empty 2xx, content type or body shape", async () => {
-    for (const response of [
-      new Response("", { status: 202, headers: { "Content-Type": "application/json" } }),
-      new Response('{"status":"success","contact":{}}', { status: 200, headers: { "Content-Type": "text/plain" } }),
-      json(200, [1, 2]),
-      new Response("{", { status: 200, headers: { "Content-Type": "application/json" } }),
-    ]) {
-      assert.ok((await rejection(client(response).crm.contacts.get({ id: "c1" }))) instanceof ProtocolError);
+    for (const status of [302, 0]) {
+      it(`refuses redirect status ${status}`, async () => {
+        const response = status === 0 ? Response.error() : new Response(null, { status, headers: { Location: "https://elsewhere.test/" } });
+        if (status === 0) Object.defineProperty(response, "type", { value: "opaqueredirect" });
+        const f = fakeFetch(response);
+        const error = await rejection(createClient({ fetch: f.fetch, apiKey: "k" }).identity.outlets.get("o1", undefined, { maxRetries }));
+        assert.ok(error instanceof InvalidResponseError);
+        assert.equal(error.status, status);
+        assert.equal(f.calls[0]?.init.redirect, "manual");
+        assert.equal(f.calls.length, 1);
+      });
     }
   });
+}
 
-  it("returns undefined for a body-less success", async () => {
-    const result = await client(new Response(null, { status: 204 })).crm.contacts.update({ id: "c1" } as never);
-    assert.equal(result, undefined);
-  });
+it("narrows marked HTTP errors across prototypes and validates declared detail kinds", async () => {
+  const code = "PAGINATION_PARAMS_INVALID";
+  const f = fakeFetch(
+    problem(400, code, { details: { reason: "limit" } }),
+    problem(400, code, { details: { reason: 42 } }),
+    problem(400, "FUTURE_PROBLEM"),
+  );
+  const { identity } = createClient({ fetch: f.fetch });
+  const first = await rejection(identity.outlets.list());
+  assert.ok(first instanceof APIError);
+  Object.setPrototypeOf(first, Error.prototype);
+  assert.ok(isAPIError(first, code));
+  assert.ok(identity.isError(first, code));
+  assert.ok(identity.outlets.list.isError(first, code));
+  assert.equal(first.details.reason, "limit");
+  assert.equal(f.calls.length, 1);
 
-  it("accepts any 2xx for a body-less operation", async () => {
-    for (const response of [
-      new Response(null, { status: 204 }),
-      json(200, { status: "success" }),
-      new Response(null, { status: 202 }),
-    ]) {
-      assert.equal(await client(response).crm.contacts.update({ id: "c1" } as never), undefined);
-    }
-  });
+  const malformed = await rejection(identity.outlets.list());
+  assert.ok(isAPIError(malformed, code));
+  assert.equal(identity.outlets.list.isError(malformed, code), false);
+  assert.equal(f.calls.length, 2);
 
-  it("accepts any 2xx envelope for a json operation", async () => {
-    const body = { status: "success", contact: { id: "c1" } };
-    for (const status of [200, 201, 202]) {
-      assert.deepEqual(await client(json(status, body)).crm.contacts.get({ id: "c1" }), body);
-    }
-  });
+  const unknown = await rejection(identity.outlets.list());
+  assert.ok(isAPIError(unknown, "FUTURE_PROBLEM"));
+  assert.equal(identity.outlets.list.isError(unknown), false);
+  assert.equal(isAPIError({ status: 400, operation: "identity.outlets.list", code }), false);
+  assert.equal(f.calls.length, 3);
 });

@@ -1,67 +1,38 @@
-// Compile-time checks only; tsc fails when an expectation breaks.
-import { createClient, paginate, type ApiError } from "../src/index.js";
-import type { ContactsListOutput, Deal, DealsUpdateInput, ProblemCode } from "../src/crm.js";
-import type { MessagesCreateInput } from "../src/whatsapp.js";
+// Compile-time checks only.
+import { bindOperation, type Binding } from "../src/bind.js";
+import { createClient, type APIPromise, type Page, type PagePromise } from "../src/index.js";
+import type { Outlet } from "../src/identity.js";
+import { broadcastsRecipientsRemove, itemsCreate, itemsUpdate } from "./fixtures/operations/operations.js";
 
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-function expectType<T extends true>(_: T): void {}
-
-export async function checks(): Promise<void> {
-  const client = createClient({ apiKey: "k" });
-
-  const list = await client.crm.contacts.list();
-  expectType<Equal<typeof list, ContactsListOutput>>(true);
-  await client.crm.contacts.list({ q: "tan", limit: 20 }, { signal: AbortSignal.timeout(1000), retries: 0 });
-
-  // @ts-expect-error id is required
-  await client.crm.deals.get();
-  // @ts-expect-error unknown member
-  await client.crm.deals.get({ id: "d", nope: 1 });
-  // @ts-expect-error exactOptionalPropertyTypes: undefined is not a value of an optional member
-  await client.crm.contacts.list({ outlet_id: undefined });
-
-  const deal: Deal = (await client.crm.deals.get({ id: "d" })).deal;
-  const update: DealsUpdateInput = { id: deal.id, if_match: deal.revision };
-  await client.crm.deals.update(update);
-
-  await client.crm.contacts.create({ name: "Tan" } as never, { idempotencyKey: "k" });
-  await client.whatsapp.broadcasts.recipients.list({ broadcast_id: "b" } as never);
-  const message: Partial<MessagesCreateInput> = {};
-  void message;
-
-  await client.crm.contacts.list({ page: 2, limit: 50, sort: "-create_at,name" });
-  // @ts-expect-error page size is limit
-  await client.crm.contacts.list({ count: 20 });
-  await client.whatsapp.agents.pairing.get({ agent_id: "a" } as never);
-  await client.whatsapp.chats.messages.list({ chat_id: "c" } as never);
-  await client.whatsapp.messageTemplates.replace({ template_id: "t" } as never);
-  await client.identity.outlets.get({ id: "o" });
-  // @ts-expect-error the template update operation is replace
-  void client.whatsapp.messageTemplates.update;
-  // @ts-expect-error If-Match is required
-  await client.whatsapp.agents.update({ agent_id: "a" });
-
-  const error: unknown = new Error();
-  if (client.crm.contacts.list.isError(error, "CRM_CONTACT_EXPANSION_LIMIT")) {
-    expectType<Equal<typeof error.code, "CRM_CONTACT_EXPANSION_LIMIT">>(true);
-    const limit: number = error.details.limit;
-    void limit;
-  }
-  // @ts-expect-error the operation does not declare this code
-  client.crm.contacts.list.isError(error, "PRECONDITION_FAILED");
-  // @ts-expect-error not a crm code
-  client.crm.isError(error, "WHATSAPP_AGENTS_FENCED");
-  if (client.crm.deals.update.isError(error)) {
-    const code: ProblemCode = error.code;
-    void code;
-  }
-  if (client.whatsapp.isError(error)) {
-    const e: ApiError = error;
-    void e;
-  }
-
-  for await (const contact of paginate(client.crm.contacts.list, { limit: 50 })) {
-    const id: string = contact.id;
+export async function checks(binding: Binding, error: unknown): Promise<void> {
+  const { identity } = createClient();
+  const call: APIPromise<Outlet> = identity.outlets.get("o1", { with_owner: true }, { maxRetries: 0 });
+  const outlet: Outlet = (await call.withResponse()).data;
+  const pending: PagePromise<Outlet> = identity.outlets.list({ limit: 2 });
+  const page: Page<Outlet> = await pending;
+  for await (const item of pending) {
+    const id: string = item.id;
     void id;
   }
+  // @ts-expect-error positional id is required
+  void identity.outlets.get({ id: "o1" });
+  // @ts-expect-error unknown query param
+  void identity.outlets.list({ count: 20 });
+  // @ts-expect-error non-keyed operations reject a key
+  void identity.outlets.get("o1", undefined, { idempotencyKey: "key" });
+  // @ts-expect-error method only narrows declared problem codes
+  identity.outlets.get.isError(error, "PRECONDITION_FAILED");
+  if (identity.outlets.list.isError(error, "PAGINATION_PARAMS_INVALID")) {
+    const reason: string = error.details.reason;
+    void reason;
+  }
+
+  const create = bindOperation(itemsCreate, binding);
+  const id: string = (await create({ content: { kind: "text", text: "Item" } }, { idempotencyKey: "key" })).id;
+  await bindOperation(broadcastsRecipientsRemove, binding)(id, { broadcast_id: id });
+  const update = bindOperation(itemsUpdate, binding);
+  await update(outlet.id, undefined, { ifMatch: '"r1"' });
+  // @ts-expect-error If-Match is required
+  void update(id);
+  void page;
 }

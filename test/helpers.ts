@@ -34,6 +34,8 @@ export function json(status: number, body: unknown, headers: Record<string, stri
   });
 }
 
+export const reply = (status: number, fields: object) => json(status, { status: "success", ...fields });
+
 export function problem(
   status: number,
   code: string,

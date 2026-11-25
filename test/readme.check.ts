@@ -1,69 +1,18 @@
-// The README examples, type-checked.
-import { createClient, isApiError, paginate } from "../src/index.js";
-import type { Deal, DealsUpdateInput } from "../src/crm.js";
-import type { Outlet } from "../src/identity.js";
-import type { MessagesCreateInput } from "../src/whatsapp.js";
+// Compile the README examples against the SDK.
+import { createClient, isAPIError } from "../src/index.js";
 
-declare const apiKey: string;
-declare function getAccessToken(): Promise<string>;
-declare const dealId: string;
-declare const id: string;
-declare const outletId: string;
-declare const nextStageId: string;
-declare const input: MessagesCreateInput;
-
-export async function examples(): Promise<void> {
+export async function examples(apiKey: string): Promise<void> {
   const client = createClient({ apiKey });
-  const { contacts } = await client.crm.contacts.list({ q: "tan", limit: 20 });
-  for (const contact of contacts.data) console.log(contact.id);
-
-  const worker = await client.crm.contacts.list({ limit: 10 });
-  void worker.contacts.data;
-  const { outlets } = await createClient().identity.outlets.list({ limit: 10 });
-  const first: Outlet | null | undefined = outlets.data[0];
-  void first;
-  createClient({ apiKey, baseUrl: { crm: "http://localhost:5005" }, allowLoopbackHttp: true, timeoutMs: 60_000 });
-
-  const browser = createClient({ token: () => getAccessToken() });
-  const { deal } = await browser.crm.deals.get({ id: dealId });
-  const typed: Deal = deal;
-  void typed;
-
-  await client.crm.contactTags.assign({ contact_id: "c", tag_id: "t" }, { signal: AbortSignal.timeout(10_000) });
-
+  const outlet = await client.identity.outlets.get("outlet-id");
+  const call = client.identity.outlets.list({ limit: 20 });
+  const { data: page, response, requestID } = await call.withResponse();
+  console.log(outlet.id, page.data.length, response.status, requestID);
+  for await (const item of client.identity.outlets.list({ limit: 20 })) console.log(item.id);
   try {
-    await client.crm.contacts.list({ with_tags: true });
+    await client.identity.outlets.list({ limit: 20 }, { maxRetries: 0, signal: AbortSignal.timeout(10_000) });
   } catch (error) {
-    if (client.crm.contacts.list.isError(error, "CRM_CONTACT_EXPANSION_LIMIT")) {
-      console.log(error.details.limit);
-    } else if (client.crm.isError(error, "CRM_CONTACT_NOT_FOUND")) {
-      // any crm operation
-    } else if (isApiError(error)) {
-      console.log(error.code, error.correlationId);
-    }
+    if (client.identity.outlets.list.isError(error, "PAGINATION_PARAMS_INVALID")) console.log(error.details.reason);
+    else if (isAPIError(error)) console.log(error.status, error.requestID);
     throw error;
   }
-
-  const key = crypto.randomUUID();
-  await client.whatsapp.messages.create(input, { idempotencyKey: key });
-
-  await client.crm.contacts.list({ outlet_id: outletId, limit: 50 });
-
-  const read = await client.crm.deals.get({ id });
-  const update: DealsUpdateInput = { id, if_match: read.deal.revision, stage_id: nextStageId, remark: "Called back" };
-  try {
-    const { revision } = await client.crm.deals.update(update);
-    void revision;
-  } catch (error) {
-    if (client.crm.deals.update.isError(error, "PRECONDITION_FAILED")) {
-      // read again
-    }
-    throw error;
-  }
-
-  const page = await client.crm.contacts.list({ limit: 100, sort: "name" });
-  if (page.contacts.next_cursor !== undefined) {
-    await client.crm.contacts.list({ limit: 100, sort: "name", after: page.contacts.next_cursor });
-  }
-  for await (const contact of paginate(client.crm.contacts.list, { limit: 100 })) console.log(contact.id);
 }
