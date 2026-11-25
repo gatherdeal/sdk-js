@@ -19,7 +19,8 @@ function isOperation(node: unknown): node is Operation {
 function execute(binding: Binding, op: Operation, args: readonly unknown[]) {
   const result = op.result;
   const offset = op.positional === undefined ? 0 : 1;
-  const options = { ...(args[offset + 1] as TransportOptions | undefined) };
+  const supplied = args[offset + 1] as TransportOptions | undefined;
+  const options = { ...supplied, ...(supplied?.headers === undefined ? {} : { headers: { ...supplied.headers } }) };
   const prepare = async () => {
     checkCallerAbort({ operation: op.id, attempt: 1 }, options.signal);
     if (result.kind === "page" && (!result.pagination.itemsField || !result.pagination.hasNextPageField)) {

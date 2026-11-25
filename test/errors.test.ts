@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, it } from "node:test";
-import { APIError, InvalidResponseError, UnprocessableEntityError, createClient, isAPIError } from "../src/index.js";
+import { APIError, InvalidResponseError, UnprocessableEntityError, GatherDeal, isAPIError } from "../src/index.js";
 import { fakeFetch, problem, rejection } from "./helpers.js";
 
 interface Fixture {
@@ -26,7 +26,7 @@ describe("problem conformance", () => {
   for (const [name, fx] of fixtures) {
     it(name, async () => {
       const f = fakeFetch(new Response(fx.response.body, { status: fx.response.status, headers: fx.response.headers }));
-      const call = createClient({ fetch: f.fetch, retries: 0 }).identity.outlets.get("o1");
+      const call = new GatherDeal({ apiKey: null, fetch: f.fetch, maxRetries: 0 }).identity.outlets.get("o1");
       if (fx.expect.kind === "success") assert.deepEqual(await call, { id: "o1" });
       else {
         const error = await rejection(call);
@@ -56,7 +56,7 @@ for (const maxRetries of [0, 2]) {
   describe(`HTTP errors with maxRetries=${maxRetries}`, () => {
     it("uses the status subclass for malformed 422", async () => {
       const f = fakeFetch(new Response("{", { status: 422, headers: { "Content-Type": "application/problem+json" } }));
-      const error = await rejection(createClient({ fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries }));
+      const error = await rejection(new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries }));
       assert.ok(error instanceof UnprocessableEntityError && isAPIError(error));
       assert.equal(error.code, undefined);
       assert.equal(error.problem, undefined);
@@ -67,7 +67,7 @@ for (const maxRetries of [0, 2]) {
     for (const status of [426, 428]) {
       it(`uses plain APIError for ${status}`, async () => {
         const f = fakeFetch(new Response("upgrade", { status }));
-        const error = await rejection(createClient({ fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries }));
+        const error = await rejection(new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries }));
         assert.ok(error instanceof APIError);
         assert.equal(error.constructor, APIError);
         assert.equal(error.status, status);
@@ -80,7 +80,7 @@ for (const maxRetries of [0, 2]) {
         const response = status === 0 ? Response.error() : new Response(null, { status, headers: { Location: "https://elsewhere.test/" } });
         if (status === 0) Object.defineProperty(response, "type", { value: "opaqueredirect" });
         const f = fakeFetch(response);
-        const error = await rejection(createClient({ fetch: f.fetch, apiKey: "k" }).identity.outlets.get("o1", undefined, { maxRetries }));
+        const error = await rejection(new GatherDeal({ fetch: f.fetch, apiKey: "k" }).identity.outlets.get("o1", undefined, { maxRetries }));
         assert.ok(error instanceof InvalidResponseError);
         assert.equal(error.status, status);
         assert.equal(f.calls[0]?.init.redirect, "manual");
@@ -97,7 +97,7 @@ it("narrows marked HTTP errors across prototypes and validates declared detail k
     problem(400, code, { details: { reason: 42 } }),
     problem(400, "FUTURE_PROBLEM"),
   );
-  const { identity } = createClient({ fetch: f.fetch });
+  const { identity } = new GatherDeal({ apiKey: null, fetch: f.fetch });
   const first = await rejection(identity.outlets.list());
   assert.ok(first instanceof APIError);
   Object.setPrototypeOf(first, Error.prototype);

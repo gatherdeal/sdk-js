@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { InvalidResponseError, createClient } from "../src/index.js";
+import { InvalidResponseError, GatherDeal } from "../src/index.js";
 import type { AgentDeletion, ChatMessageFeedListResponse, MessageTemplatePreviewResponse } from "../src/whatsapp.js";
 import { fakeFetch, rejection, reply } from "./helpers.js";
 
@@ -10,7 +10,7 @@ for (const maxRetries of [0, 2]) {
   describe(`CRM and WhatsApp results with maxRetries=${maxRetries}`, () => {
     function setup(...responses: Response[]) {
       const f = fakeFetch(...responses);
-      return { client: createClient({ fetch: f.fetch, retries: maxRetries, token: () => "token" }), calls: f.calls };
+      return { client: new GatherDeal({ fetch: f.fetch, maxRetries, accessToken: () => "token" }), calls: f.calls };
     }
 
     it("unwraps an accepted agent deletion", async () => {

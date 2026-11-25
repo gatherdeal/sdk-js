@@ -37,12 +37,16 @@
       "types": "./dist/whatsapp.d.ts",
       "default": "./dist/whatsapp.js"
     },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "default": "./dist/internal.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "lint": "node scripts/generated.mjs check && npm run build && publint --strict && attw --pack . --profile esm-only",
+    "lint": "node scripts/generated.mjs check && node scripts/version.mjs --check && npm run build && publint --strict && attw --pack . --profile esm-only",
     "test": "rm -rf build && tsc -p tsconfig.test.json && node --test 'build/test/**/*.test.js'",
     "smoke": "node scripts/smoke.mjs",
     "prepack": "npm run build"

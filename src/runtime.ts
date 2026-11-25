@@ -4,6 +4,30 @@ export function isBrowserLike(): boolean {
   return typeof g.document !== "undefined" || typeof g.importScripts === "function";
 }
 
+/** Reads the default API key in runtimes with safe environment access. */
+export function readAPIKey(): string | undefined {
+  if (isBrowserLike() || globalThis.navigator?.userAgent === "Cloudflare-Workers") return undefined;
+
+  const variable = "GATHERDEAL_API_KEY";
+  const runtime = globalThis as {
+    Deno?: {
+      permissions: { querySync(descriptor: { name: "env"; variable: string }): { state: string } };
+      env: { get(variable: string): string | undefined };
+    };
+    process?: {
+      versions?: { node?: string; bun?: string };
+      env?: Record<string, string | undefined>;
+    };
+  };
+  const deno = runtime.Deno;
+  if (deno !== undefined) {
+    return deno.permissions.querySync({ name: "env", variable }).state === "granted" ? deno.env.get(variable) : undefined;
+  }
+  const process = runtime.process;
+  if (process?.versions?.node || process?.versions?.bun) return process.env?.[variable];
+  return undefined;
+}
+
 /** A random version 4 UUID. */
 export function randomId(): string {
   const c = globalThis.crypto;

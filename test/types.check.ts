@@ -1,10 +1,12 @@
 // Compile-time checks only.
-import { createClient, type APIPromise, type Page, type PagePromise } from "../src/index.js";
+import { GatherDeal, type APIPromise, type Page, type PagePromise } from "../src/index.js";
+// @ts-expect-error descriptor types belong to the internal entry
+import type { Operation } from "../src/index.js";
 import type { Outlet } from "../src/identity.js";
 import type { ChatMessageFeedListResponse } from "../src/whatsapp.js";
 
 export async function checks(error: unknown): Promise<void> {
-  const { crm, identity, whatsapp } = createClient();
+  const { crm, identity, whatsapp } = new GatherDeal({ apiKey: null });
   const call: APIPromise<Outlet> = identity.outlets.get("o1", { with_owner: true }, { maxRetries: 0 });
   const outlet: Outlet = (await call.withResponse()).data;
   const pending: PagePromise<Outlet> = identity.outlets.list({ limit: 2 });

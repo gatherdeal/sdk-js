@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { InvalidResponseError, createClient } from "../src/index.js";
+import { InvalidResponseError, GatherDeal } from "../src/index.js";
 import { fakeFetch, rejection, reply } from "./helpers.js";
 
 function page(ids: string[], fields: object = {}) {
@@ -19,7 +19,7 @@ for (const maxRetries of [0, 2]) {
       const outlet = { id: "o/1" };
       const body = { status: "success", outlet };
       const f = fakeFetch(Response.json(body, { headers: { "X-Correlation-Id": "req-1" }, statusText: "Custom" }));
-      const call = createClient({ fetch: f.fetch }).identity.outlets.get("o/1", undefined, { maxRetries });
+      const call = new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.get("o/1", undefined, { maxRetries });
       const [resource, withResponse, raw] = await Promise.all([call, call.withResponse(), call.asResponse()]);
       assert.deepEqual(resource, outlet);
       assert.equal(resource, withResponse.data);
@@ -36,7 +36,7 @@ for (const maxRetries of [0, 2]) {
     it("rejects an unexpected success status or envelope marker", async () => {
       for (const response of [reply(202, { outlet: {} }), Response.json({ status: "error", outlet: {} })]) {
         const f = fakeFetch(response);
-        assert.ok(await rejection(createClient({ fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries })) instanceof InvalidResponseError);
+        assert.ok(await rejection(new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.get("o1", undefined, { maxRetries })) instanceof InvalidResponseError);
         assert.equal(f.calls.length, 1);
       }
     });
@@ -45,7 +45,7 @@ for (const maxRetries of [0, 2]) {
   describe(`pagination with maxRetries=${maxRetries}`, () => {
     it("stops at a terminal page and shares the first fetch with await, response views and iteration", async () => {
       const f = fakeFetch(page(["o1"]));
-      const pending = createClient({ fetch: f.fetch }).identity.outlets.list(undefined, { maxRetries });
+      const pending = new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.list(undefined, { maxRetries });
       const [first, raw, withResponse, items] = await Promise.all([pending, pending.asResponse(), pending.withResponse(), collect(pending)]);
       assert.deepEqual(items, [{ id: "o1" }]);
       assert.equal(first.hasNextPage(), false);
@@ -58,11 +58,14 @@ for (const maxRetries of [0, 2]) {
 
     it("continues from implicit numbered page one and shares getNextPage with iteration", async () => {
       const f = fakeFetch(page(["o1"], { has_next_page: true, page: 1 }), page(["o2"], { page: 2 }));
-      const pending = createClient({ fetch: f.fetch }).identity.outlets.list({ q: "Tan" }, { maxRetries });
+      const headers = { "X-Test": "first call" };
+      const pending = new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.list({ q: "Tan" }, { maxRetries, headers });
       const first = await pending;
+      headers["X-Test"] = "changed";
       assert.equal(f.calls.length, 1);
       const [second, pages] = await Promise.all([first.getNextPage(), collect(first.iterPages())]);
       assert.deepEqual(pages, [first, second]);
+      assert.deepEqual(f.calls.map(({ headers }) => headers.get("X-Test")), ["first call", "first call"]);
       assert.deepEqual(await collect(pending), [{ id: "o1" }, { id: "o2" }]);
       assert.equal(new URL(f.calls[0]!.url).searchParams.has("page"), false);
       assert.equal(new URL(f.calls[1]!.url).searchParams.get("page"), "2");
@@ -73,7 +76,7 @@ for (const maxRetries of [0, 2]) {
     for (const params of [{ page: 3 }, { before: "prior" }]) {
       it(`follows a cursor and drops the ${Object.keys(params)[0]} selector`, async () => {
         const f = fakeFetch(page(["o1"], { has_next_page: true, next_cursor: "resume" }), page(["o2"]));
-        const call = createClient({ fetch: f.fetch }).identity.outlets.list({ ...params, limit: 10, sort: "name" }, { maxRetries });
+        const call = new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.list({ ...params, limit: 10, sort: "name" }, { maxRetries });
         assert.deepEqual(await collect(call), [{ id: "o1" }, { id: "o2" }]);
         assert.deepEqual(Object.fromEntries(new URL(f.calls[1]!.url).searchParams), { limit: "10", sort: "name", after: "resume" });
         assert.equal(f.calls.length, 2);
@@ -82,7 +85,7 @@ for (const maxRetries of [0, 2]) {
 
     it("rejects a repeated resume cursor from the initial selector", async () => {
       const f = fakeFetch(page(["o1"], { has_next_page: true, next_cursor: "same" }));
-      const call = createClient({ fetch: f.fetch }).identity.outlets.list({ after: "same" }, { maxRetries });
+      const call = new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.list({ after: "same" }, { maxRetries });
       const error = await rejection(call);
       assert.ok(error instanceof InvalidResponseError);
       assert.match(error.message, /repeated next cursor/);
@@ -91,7 +94,7 @@ for (const maxRetries of [0, 2]) {
 
     it("carries the seen cursor set into getNextPage", async () => {
       const f = fakeFetch(page(["o1"], { has_next_page: true, next_cursor: "new" }), page(["o2"], { has_next_page: true, next_cursor: "old" }));
-      const first = await createClient({ fetch: f.fetch }).identity.outlets.list({ after: "old" }, { maxRetries });
+      const first = await new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.list({ after: "old" }, { maxRetries });
       assert.equal(f.calls.length, 1);
       const error = await rejection(first.getNextPage());
       assert.ok(error instanceof InvalidResponseError);
@@ -101,7 +104,7 @@ for (const maxRetries of [0, 2]) {
 
     it("rejects a missing cursor in cursor mode, even if a page number was sent back", async () => {
       const f = fakeFetch(page(["o1"], { has_next_page: true, page: 2 }));
-      const error = await rejection(createClient({ fetch: f.fetch }).identity.outlets.list({ after: "old" }, { maxRetries }));
+      const error = await rejection(new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.list({ after: "old" }, { maxRetries }));
       assert.ok(error instanceof InvalidResponseError);
       assert.match(error.message, /missing a cursor/);
       assert.equal(f.calls.length, 1);
@@ -110,7 +113,7 @@ for (const maxRetries of [0, 2]) {
     it("rejects missing item arrays and non-boolean continuation flags", async () => {
       for (const body of [{ has_next_page: false }, { data: [], has_next_page: "false" }]) {
         const f = fakeFetch(reply(200, { outlets: body }));
-        assert.ok(await rejection(createClient({ fetch: f.fetch }).identity.outlets.list(undefined, { maxRetries })) instanceof InvalidResponseError);
+        assert.ok(await rejection(new GatherDeal({ apiKey: null, fetch: f.fetch }).identity.outlets.list(undefined, { maxRetries })) instanceof InvalidResponseError);
         assert.equal(f.calls.length, 1);
       }
     });

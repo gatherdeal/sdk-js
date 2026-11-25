@@ -1,5 +1,5 @@
-export { createClient } from "./client.js";
-export type { Client, ClientOptions, ServiceClient } from "./client.js";
+export { default, GatherDeal } from "./client.js";
+export type { ClientOptions } from "./client.js";
 export {
   APIConnectionError,
   APIConnectionTimeoutError,
@@ -24,16 +24,8 @@ export type { RequestOptions as CallOptions } from "./generated/operation.js";
 export type {
   APIPromise,
   ConditionalRequestOptions,
-  JsonKind,
   KeyedRequestOptions,
-  Method,
-  Methods,
-  Operation,
   Page,
   PagePromise,
-  Pagination,
-  Parameter,
-  ParameterEncoding,
-  ProblemInfo,
   RequestOptions,
 } from "./generated/operation.js";

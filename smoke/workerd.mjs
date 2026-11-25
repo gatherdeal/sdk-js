@@ -29,11 +29,11 @@ const origin = await listen((req, res) => {
 });
 
 const worker = `
-import { createClient, InvalidResponseError } from "./sdk/index.js";
+import { GatherDeal, InvalidResponseError } from "./sdk/index.js";
 export default {
   async fetch(request) {
     const origin = new URL(request.url).searchParams.get("origin");
-    const client = createClient({ apiKey: "secret", baseUrl: { identity: origin }, allowLoopbackHttp: true, retries: 0 });
+    const client = new GatherDeal({ apiKey: "secret", serviceBaseURLs: { identity: origin }, maxRetries: 0 });
     const ok = await client.identity.outlets.get("ok");
     let error;
     try {

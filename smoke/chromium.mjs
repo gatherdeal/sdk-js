@@ -54,12 +54,12 @@ const api = await listen("localhost", (req, res) => {
 });
 
 const page = `<!doctype html><meta charset="utf-8"><script type="module">
-import { createClient } from "/sdk/index.js";
+import GatherDeal from "/sdk/index.js";
 const result = {};
 try {
-  try { createClient({ apiKey: "k" }); result.apiKeyGuard = false; } catch { result.apiKeyGuard = true; }
+  try { new GatherDeal({ apiKey: "k" }); result.apiKeyGuard = false; } catch { result.apiKeyGuard = true; }
   const baseURL = ${JSON.stringify(api.url)};
-  const client = createClient({ token: () => "t", baseUrl: { crm: baseURL, identity: baseURL }, allowLoopbackHttp: true, retries: 0 });
+  const client = new GatherDeal({ accessToken: "t", serviceBaseURLs: { crm: baseURL, identity: baseURL }, maxRetries: 0 });
   result.created = (await client.crm.contacts.create({ kind: "personal", name: "Tan" })).id;
   result.revision = (await client.crm.deals.update("d1", { remark: "x" }, { ifMatch: '"r1"' })).revision;
   try { await client.identity.outlets.get("missing"); } catch (e) {
@@ -91,7 +91,7 @@ try {
     if (result[key] !== value) throw new Error(`chromium: ${key} is ${JSON.stringify(result[key])}, want ${value}: ${JSON.stringify(result)}`);
   }
   const keyed = preflights.find((p) => p.method === "POST");
-  if (!keyed?.headers.includes("idempotency-key")) throw new Error(`chromium: no keyed preflight: ${JSON.stringify(preflights)}`);
+  if (!keyed?.headers.includes("idempotency-key") || !keyed.headers.includes("x-gatherdeal-client")) throw new Error(`chromium: no keyed preflight: ${JSON.stringify(preflights)}`);
   const conditional = preflights.find((p) => p.method === "PATCH");
   if (!conditional?.headers.includes("if-match")) throw new Error(`chromium: no conditional preflight: ${JSON.stringify(preflights)}`);
   console.log("chromium: ok");

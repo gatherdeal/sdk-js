@@ -1,8 +1,8 @@
 // Compile the README examples against the SDK.
-import { createClient, isAPIError } from "../src/index.js";
+import { GatherDeal, isAPIError } from "../src/index.js";
 
 export async function examples(apiKey: string): Promise<void> {
-  const client = createClient({ apiKey });
+  const client = new GatherDeal({ apiKey });
   const deal = await client.crm.deals.get("deal-id");
   const { revision } = await client.crm.deals.update(
     deal.id,

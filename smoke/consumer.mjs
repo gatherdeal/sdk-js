@@ -1,8 +1,8 @@
 // Runs against the installed package in Node, Bun and Deno.
-import { InternalServerError, InvalidResponseError, NotFoundError, createClient, isAPIError } from "@gatherdeal/sdk";
-import * as crm from "@gatherdeal/sdk/crm";
-import * as identity from "@gatherdeal/sdk/identity";
-import * as whatsapp from "@gatherdeal/sdk/whatsapp";
+import GatherDeal, { GatherDeal as NamedGatherDeal, InternalServerError, InvalidResponseError, NotFoundError, isAPIError } from "@gatherdeal/sdk";
+import * as sdk from "@gatherdeal/sdk";
+import { operations, problems, service } from "@gatherdeal/sdk/internal";
+import manifest from "@gatherdeal/sdk/package.json" with { type: "json" };
 
 function check(condition, message) {
   if (!condition) throw new Error(`smoke: ${message}`);
@@ -41,12 +41,17 @@ async function serve(handler) {
   return { url: `http://127.0.0.1:${server.address().port}`, close: () => server.close() };
 }
 
-check(crm.service.name === "crm" && identity.service.name === "identity" && whatsapp.service.name === "whatsapp", "service subpaths");
-check(identity.problems.IDENTITY_OUTLET_NOT_FOUND.status === 404, "problem table");
+check(GatherDeal === NamedGatherDeal, "constructor exports");
+for (const name of ["createClient", "paginate", "operations", "problems", "service"]) {
+  check(!(name in sdk), `unexpected root export ${name}`);
+}
+check(service.crm.name === "crm" && service.identity.name === "identity" && service.whatsapp.name === "whatsapp", "service metadata");
+check(operations.identity.outlets.list.id === "identity.outlets.list", "operation tree");
+check(problems.identity.IDENTITY_OUTLET_NOT_FOUND.status === 404, "problem table");
 
 {
   const f = fakeFetch(json(200, { status: "success", outlet: { id: "o1" } }));
-  const client = createClient({ apiKey: "k", fetch: f.fetch });
+  const client = new GatherDeal({ apiKey: "k", fetch: f.fetch });
   const pending = client.identity.outlets.get("o1");
   const { data, response, requestID } = await pending.withResponse();
   check(data.id === "o1" && response.status === 200 && requestID === "corr-1", "response views");
@@ -54,6 +59,8 @@ check(identity.problems.IDENTITY_OUTLET_NOT_FOUND.status === 404, "problem table
   const call = f.calls[0];
   check(call.url === "https://api.gatherdeal.ai/identity/v1/outlets/o1", `url ${call.url}`);
   check(call.headers.get("Authorization") === "Bearer k", "authorization");
+  check(call.headers.get("X-GatherDeal-Client") === `sdk-js/${manifest.version}`, "client header");
+  check(call.headers.get("User-Agent") === `GatherDeal/JS ${manifest.version}`, "user agent");
   check(call.init.redirect === "manual", "redirect manual");
 }
 
@@ -65,7 +72,7 @@ check(identity.problems.IDENTITY_OUTLET_NOT_FOUND.status === 404, "problem table
       outlets: { data: ids.map((id) => ({ id })), has_next_page: next !== undefined, has_prev_page: false, page_size: 2, next_cursor: next },
     });
   const f = fakeFetch(page(["a", "b"], "n1"), page(["c"]));
-  const client = createClient({ apiKey: "k", fetch: f.fetch });
+  const client = new GatherDeal({ apiKey: "k", fetch: f.fetch });
   const ids = [];
   for await (const c of client.identity.outlets.list({ filter: { rules: [{ field: "name", op: "EQ", value: "陈" }] } })) ids.push(c.id);
   check(ids.join() === "a,b,c", "pagination");
@@ -75,7 +82,7 @@ check(identity.problems.IDENTITY_OUTLET_NOT_FOUND.status === 404, "problem table
 // Errors.
 {
   const problem = json(404, { type: "https://docs.gatherdeal.ai/errors/IDENTITY_OUTLET_NOT_FOUND", title: "Missing", status: 404, code: "IDENTITY_OUTLET_NOT_FOUND", retryable: false }, "application/problem+json");
-  const client = createClient({ apiKey: "k", fetch: fakeFetch(problem, new Response("", { status: 502 })).fetch, retries: 0 });
+  const client = new GatherDeal({ apiKey: "k", fetch: fakeFetch(problem, new Response("", { status: 502 })).fetch, maxRetries: 0 });
   let error;
   try {
     await client.identity.outlets.get("o1");
@@ -101,7 +108,7 @@ check(identity.problems.IDENTITY_OUTLET_NOT_FOUND.status === 404, "problem table
     return new Response("{}");
   });
   const origin = await serve(() => new Response(null, { status: 302, headers: { Location: `${target.url}/v1/outlets/o1` } }));
-  const client = createClient({ apiKey: "secret", baseUrl: { identity: origin.url }, allowLoopbackHttp: true, retries: 0 });
+  const client = new GatherDeal({ apiKey: "secret", serviceBaseURLs: { identity: origin.url }, maxRetries: 0 });
   let error;
   try {
     await client.identity.outlets.get("o1");
