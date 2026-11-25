@@ -1,6 +1,6 @@
 name: sync
 
-# Fetches the published API modules and opens a pull request when they change.
+# Every six hours, fetches the published API modules and opens a pull request when they change.
 on:
   schedule:
     - cron: "17 */6 * * *"
