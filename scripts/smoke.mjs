@@ -77,8 +77,27 @@ async function runPublicTests(consumer) {
   run(process.execPath, ["--test", ...kept], consumer);
 }
 
+async function installConsumer(consumer, tarball) {
+  await mkdir(consumer);
+  const manifest = join(consumer, "package.json");
+  await writeFile(manifest, JSON.stringify({ private: true, type: "module", dependencies: { "@gatherdeal/sdk": `file:${tarball}` } }));
+  run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--no-package-lock"], consumer);
+  return manifest;
+}
+
+function runConsumerTypes(consumer) {
+  for (const compiler of ["typescript-5-0", "typescript"]) {
+    const tsc = join(ROOT, "node_modules", compiler, "bin", "tsc");
+    run(process.execPath, [tsc, "--version"], consumer);
+    for (const mode of ["node16", "nodenext"]) {
+      run(process.execPath, [tsc, "-p", "tsconfig.json", "--module", mode], consumer);
+      console.log(`types: ${mode} .cts and .mts passed`);
+    }
+  }
+}
+
 const work = await mkdtemp(join(tmpdir(), "gatherdeal-sdk-smoke-"));
-const run = (command, argv, cwd = work) => execFileSync(command, argv, { cwd, stdio: "inherit" });
+const run = (command, argv, cwd = work, env = process.env) => execFileSync(command, argv, { cwd, env, stdio: "inherit" });
 const results = [];
 let failed = false;
 
@@ -90,11 +109,7 @@ try {
     tarball = join(work, `gatherdeal-sdk-${version}.tgz`);
   }
   const consumer = join(work, "consumer");
-  await mkdir(consumer);
-  await writeFile(
-    join(consumer, "package.json"),
-    JSON.stringify({ private: true, type: "module", dependencies: { "@gatherdeal/sdk": `file:${tarball}` } }),
-  );
+  await installConsumer(consumer, tarball);
   await writeFile(
     join(consumer, "tsconfig.json"),
     JSON.stringify({
@@ -109,27 +124,33 @@ try {
         noEmit: true,
         skipLibCheck: false,
       },
-      files: ["consumer-types.ts"],
+      files: ["consumer-types.cts", "consumer-types.mts"],
     }),
   );
-  for (const f of ["consumer.mjs", "consumer-types.ts"]) await copyFile(join(ROOT, "smoke", f), join(consumer, f));
-  run("npm", ["install", "--no-audit", "--no-fund", "--ignore-scripts", "--no-package-lock"], consumer);
+  for (const f of ["consumer.mjs", "consumer-node.mjs", "consumer-types.cts", "consumer-types.mts", "deno-env.mjs"]) {
+    await copyFile(join(ROOT, "smoke", f), join(consumer, f));
+  }
   const installed = join(consumer, "node_modules", "@gatherdeal", "sdk");
 
   const runtimes = {
-    node: { available: () => true, run: () => run(process.execPath, ["consumer.mjs"], consumer) },
+    node: {
+      available: () => true,
+      run: async () => {
+        const second = await installConsumer(join(work, "second-copy"), tarball);
+        run(process.execPath, ["consumer-node.mjs", second], consumer);
+        run(process.execPath, ["consumer.mjs"], consumer);
+      },
+    },
     bun: { available: () => has("bun") || "bun is not installed", run: () => run("bun", ["consumer.mjs"], consumer) },
     deno: {
       available: () => has("deno") || "deno is not installed",
       run: () => {
-        run("deno", ["run", "--allow-net", "--allow-read", "consumer.mjs"], consumer);
-        run("deno", ["check", "consumer-types.ts"], consumer);
+        run("deno", ["run", "--no-prompt", "deno-env.mjs"], consumer, { ...process.env, GATHERDEAL_API_KEY: "smoke-deno-sentinel" });
+        run("deno", ["run", "--no-prompt", "--allow-net", "--allow-read", "consumer.mjs"], consumer);
+        run("deno", ["check", "consumer-types.mts"], consumer);
       },
     },
-    types: {
-      available: () => true,
-      run: () => run(process.execPath, [join(ROOT, "node_modules", "typescript", "bin", "tsc"), "-p", "tsconfig.json"], consumer),
-    },
+    types: { available: () => true, run: () => runConsumerTypes(consumer) },
     tests: { available: () => true, run: () => runPublicTests(consumer) },
     workerd: {
       available: () => resolvable("miniflare") || "miniflare is not installed (npm ci --prefix smoke)",

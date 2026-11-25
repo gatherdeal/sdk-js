@@ -2,6 +2,6 @@
   "allowOrigin": "*",
   "allowMethods": ["GET", "POST", "PUT", "PATCH", "DELETE"],
   "allowHeaders": ["Accept", "Authorization", "Content-Type", "Idempotency-Key", "If-Match", "X-GatherDeal-Client"],
-  "exposeHeaders": ["Retry-After", "X-Correlation-Id"],
+  "exposeHeaders": ["Location", "X-Correlation-Id", "Retry-After", "ETag"],
   "maxAge": 600
 }

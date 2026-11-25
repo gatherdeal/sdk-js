@@ -1,4 +1,4 @@
-// Type-checked against the installed package with strict settings.
+// ESM consumer type-checked against the installed package with strict settings.
 import GatherDeal, { isAPIError } from "@gatherdeal/sdk";
 import { operations, type Operation } from "@gatherdeal/sdk/internal";
 import type { DealUpdateResponse } from "@gatherdeal/sdk/crm";

@@ -63,7 +63,8 @@ try {
   result.created = (await client.crm.contacts.create({ kind: "personal", name: "Tan" })).id;
   result.revision = (await client.crm.deals.update("d1", { remark: "x" }, { ifMatch: '"r1"' })).revision;
   try { await client.identity.outlets.get("missing"); } catch (e) {
-    result.code = e.code; result.correlationId = e.requestID; result.retryAfterMs = e.retryAfterMs;
+    result.code = e.code; result.requestID = e.requestID; result.correlationId = e.headers.get("X-Correlation-Id");
+    result.retryAfter = e.headers.get("Retry-After"); result.retryAfterMs = e.retryAfterMs;
   }
 } catch (e) { result.error = String(e); }
 window.__result = result;
@@ -81,12 +82,16 @@ const site = await listen("127.0.0.1", async (req, res) => {
   }
 });
 
-const browser = await chromium.launch(executablePath === undefined ? {} : { executablePath });
+let browser;
 try {
+  browser = await chromium.launch(executablePath === undefined ? {} : { executablePath });
   const tab = await browser.newPage();
   await tab.goto(site.url);
   const result = await tab.waitForFunction(() => window.__result, undefined, { timeout: 15_000 }).then((h) => h.jsonValue());
-  const want = { apiKeyGuard: true, created: "c1", revision: '"r2"', code: "NOT_FOUND", correlationId: "corr-1", retryAfterMs: 7000 };
+  const want = {
+    apiKeyGuard: true, created: "c1", revision: '"r2"', code: "NOT_FOUND",
+    requestID: "corr-1", correlationId: "corr-1", retryAfter: "7", retryAfterMs: 7000,
+  };
   for (const [key, value] of Object.entries(want)) {
     if (result[key] !== value) throw new Error(`chromium: ${key} is ${JSON.stringify(result[key])}, want ${value}: ${JSON.stringify(result)}`);
   }
@@ -94,9 +99,9 @@ try {
   if (!keyed?.headers.includes("idempotency-key") || !keyed.headers.includes("x-gatherdeal-client")) throw new Error(`chromium: no keyed preflight: ${JSON.stringify(preflights)}`);
   const conditional = preflights.find((p) => p.method === "PATCH");
   if (!conditional?.headers.includes("if-match")) throw new Error(`chromium: no conditional preflight: ${JSON.stringify(preflights)}`);
-  console.log("chromium: ok");
+  console.log("chromium: preflight included X-GatherDeal-Client, and X-Correlation-Id and Retry-After were readable");
 } finally {
-  await browser.close();
   api.close();
   site.close();
+  await browser?.close();
 }
