@@ -128,9 +128,9 @@ describe("success validation", () => {
     assert.match(error.message, /lacks "contact"/);
   });
 
-  it("rejects an unexpected status, content type or body shape", async () => {
+  it("rejects an empty 2xx, content type or body shape", async () => {
     for (const response of [
-      json(201, { status: "success", contact: {} }),
+      new Response("", { status: 202, headers: { "Content-Type": "application/json" } }),
       new Response('{"status":"success","contact":{}}', { status: 200, headers: { "Content-Type": "text/plain" } }),
       json(200, [1, 2]),
       new Response("{", { status: 200, headers: { "Content-Type": "application/json" } }),
@@ -142,7 +142,22 @@ describe("success validation", () => {
   it("returns undefined for a body-less success", async () => {
     const result = await client(new Response(null, { status: 204 })).crm.contacts.update({ id: "c1" } as never);
     assert.equal(result, undefined);
-    const wrong = await rejection(client(json(200, { status: "success" })).crm.contacts.update({ id: "c1" } as never));
-    assert.ok(wrong instanceof ProtocolError);
+  });
+
+  it("accepts any 2xx for a body-less operation", async () => {
+    for (const response of [
+      new Response(null, { status: 204 }),
+      json(200, { status: "success" }),
+      new Response(null, { status: 202 }),
+    ]) {
+      assert.equal(await client(response).crm.contacts.update({ id: "c1" } as never), undefined);
+    }
+  });
+
+  it("accepts any 2xx envelope for a json operation", async () => {
+    const body = { status: "success", contact: { id: "c1" } };
+    for (const status of [200, 201, 202]) {
+      assert.deepEqual(await client(json(status, body)).crm.contacts.get({ id: "c1" }), body);
+    }
   });
 });

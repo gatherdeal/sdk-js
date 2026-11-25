@@ -72,7 +72,6 @@ export async function readResponse(
 
   if (status >= 200 && status < 300) {
     if (type === "application/problem+json") throw protocol("problem document with a success status");
-    if (status !== op.success.status) throw protocol(`unexpected success status, want ${op.success.status}`);
     if (op.success.body === "none") return undefined;
     if (type !== "application/json") throw protocol(`unexpected content type "${type}"`);
     const body = parseJson(text);
