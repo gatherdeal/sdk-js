@@ -86,7 +86,7 @@
   "scripts": {
     "build": "rm -rf dist && node node_modules/typescript/bin/tsc -p tsconfig.build.json && node scripts/build.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc -p tsconfig.build.json --noEmit && node node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit",
-    "lint": "node scripts/generated.mjs check && node scripts/version.mjs --check && npm run build && publint --strict && attw --pack .",
+    "lint": "node scripts/generated.mjs check && node scripts/version.mjs --check && npm run build && publint --strict --pack npm && attw --pack .",
     "test": "rm -rf build && node node_modules/typescript/bin/tsc -p tsconfig.test.json && node --test 'build/test/**/*.test.js' build/test/readme.check.js",
     "smoke": "node scripts/smoke.mjs",
     "prepack": "npm run build"
