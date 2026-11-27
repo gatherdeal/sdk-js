@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [22, 24]
+        node: [24, 26]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -39,17 +39,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: node 22
-            node: 22
+          - name: node 26
+            node: 26
             runtimes: node types tests
           - name: node 24
             node: 24
             runtimes: node types tests
           - name: bun
-            node: 24
+            node: 26
             runtimes: bun
           - name: deno
-            node: 24
+            node: 26
             runtimes: deno
     runs-on: ubuntu-24.04
     steps:
@@ -79,7 +79,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
       - run: npm ci
       - run: npm ci --prefix smoke
       - run: node scripts/smoke.mjs workerd
@@ -93,7 +93,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
       - run: npm ci
       - run: npm ci --prefix smoke
       - run: npx playwright-core install --with-deps chromium
