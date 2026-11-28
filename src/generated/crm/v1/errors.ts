@@ -7,6 +7,7 @@ import type * as T from "./types.js";
 /** Every problem code the operations of this API version declare. */
 export const problems = {
   BAD_REQUEST: { status: 400, retryable: false },
+  BATCH_REJECTED: { status: 422, retryable: false, details: { complete: ["boolean"] } },
   CLIENT_UPGRADE_REQUIRED: { status: 426, retryable: false, details: { client: ["string"], current_version: ["string"], min_version: ["string"] } },
   CONFLICT: { status: 409, retryable: false },
   CRM_CONTACT_CHILD_KIND_MISMATCH: { status: 422, retryable: false },
@@ -19,6 +20,7 @@ export const problems = {
   CRM_CONTACT_PHONE_OCCUPIED: { status: 409, retryable: false },
   CRM_CONTACT_REFERRAL_CIRCULAR: { status: 422, retryable: false },
   CRM_CONTACT_REFERRER_NOT_ALLOWED: { status: 422, retryable: false },
+  CRM_CONTACT_TAG_ALREADY_EXISTS: { status: 409, retryable: false },
   CRM_CONTACT_TAG_NOT_FOUND: { status: 404, retryable: false },
   CRM_CONTACT_VERIFIED_IMMUTABLE: { status: 422, retryable: false },
   CRM_DEAL_OUTLET_REQUIRED: { status: 422, retryable: false },
@@ -61,6 +63,7 @@ export type ProblemCode = keyof typeof problems;
 
 /** The details member of each problem code that carries details. */
 export type ProblemDetails = {
+  BATCH_REJECTED: T.BatchRejectedDetails;
   CLIENT_UPGRADE_REQUIRED: T.ClientUpgradeRequiredDetails;
   CRM_CONTACT_EXPANSION_LIMIT: T.ContactExpansionLimitDetails;
   CRM_SALES_PIPELINE_STAGE_LIMIT: T.SalesPipelineStageLimitDetails;

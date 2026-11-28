@@ -4,6 +4,71 @@ import type { APIPromise, ConditionalRequestOptions, DelegatedAccessErrorCode, K
 import { delegatedAccessCodes } from "../../operation.js";
 import type * as T from "./types.js";
 
+export type ContactLogBatchCreateParams = {
+  /**
+   * Outlet the request acts in. It must be an outlet the credential may use; omit it to use every such outlet.
+   */
+  outlet_id?: string;
+} & ({
+  /**
+   * The items to write; all commit or none does. Results and item errors use their index.
+   */
+  items: T.BatchCreateContactLogItem[] | null;
+});
+export type ContactLogBatchCreateResponse = {
+  /**
+   * One result per submitted item in input order.
+   */
+  results: T.KeyedAcknowledgment[];
+};
+export type ContactLogBatchCreateErrorCode =
+  | DelegatedAccessErrorCode
+  | "BAD_REQUEST"
+  | "BATCH_REJECTED"
+  | "CLIENT_UPGRADE_REQUIRED"
+  | "CONFLICT"
+  | "CRM_CONTACT_LOG_NOT_FOUND"
+  | "CRM_CONTACT_NOT_FOUND"
+  | "FORBIDDEN"
+  | "IDEMPOTENCY_KEY_CONFLICT"
+  | "IDEMPOTENCY_KEY_REQUIRED"
+  | "INTERNAL_ERROR"
+  | "UNAUTHORIZED"
+  | "VALIDATION_FAILED";
+/** Codes of the items a crm.contact_logs.batch_create BATCH_REJECTED lists by index. */
+export type ContactLogBatchCreateItemErrorCode = "CRM_CONTACT_NOT_FOUND" | "FORBIDDEN" | "VALIDATION_FAILED";
+export const contactLogsBatchCreate = {
+  id: "crm.contact_logs.batch_create",
+  method: "POST",
+  path: "/v1/contact-logs/batch-create",
+  parameters: [
+    { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
+  ],
+  body: "required",
+  success: { status: 200, body: "json", required: ["results", "status"] },
+  result: { kind: "object" },
+  idempotency: "keyed",
+  batch: { verb: "create", maxItems: 100, itemErrors: ["CRM_CONTACT_NOT_FOUND", "FORBIDDEN", "VALIDATION_FAILED"] },
+  authentication: "required",
+  organizationKeys: true,
+  errors: [
+    ...delegatedAccessCodes,
+    "BAD_REQUEST",
+    "BATCH_REJECTED",
+    "CLIENT_UPGRADE_REQUIRED",
+    "CONFLICT",
+    "CRM_CONTACT_LOG_NOT_FOUND",
+    "CRM_CONTACT_NOT_FOUND",
+    "FORBIDDEN",
+    "IDEMPOTENCY_KEY_CONFLICT",
+    "IDEMPOTENCY_KEY_REQUIRED",
+    "INTERNAL_ERROR",
+    "UNAUTHORIZED",
+    "VALIDATION_FAILED",
+  ],
+  "~types": undefined as unknown as { readonly args: [params: ContactLogBatchCreateParams, options?: KeyedRequestOptions]; readonly result: APIPromise<ContactLogBatchCreateResponse> },
+} as const satisfies Operation<[params: ContactLogBatchCreateParams, options?: KeyedRequestOptions], APIPromise<ContactLogBatchCreateResponse>, ContactLogBatchCreateErrorCode>;
+
 export type ContactLogCreateParams = {
   /**
    * Outlet the request acts in. It must be an outlet the credential may use; omit it to use every such outlet.
@@ -175,7 +240,7 @@ export const contactLogsList = {
   "~types": undefined as unknown as { readonly args: [params: ContactLogListParams, options?: RequestOptions]; readonly result: PagePromise<T.ContactLog> },
 } as const satisfies Operation<[params: ContactLogListParams, options?: RequestOptions], PagePromise<T.ContactLog>, ContactLogListErrorCode>;
 
-export type ContactTagAddParams = {
+export type ContactTagAssignmentAddParams = {
   /**
    * Contact to receive the tag.
    */
@@ -185,7 +250,7 @@ export type ContactTagAddParams = {
    */
   outlet_id?: string;
 };
-export type ContactTagAddErrorCode =
+export type ContactTagAssignmentAddErrorCode =
   | DelegatedAccessErrorCode
   | "BAD_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
@@ -196,8 +261,8 @@ export type ContactTagAddErrorCode =
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactTagsAdd = {
-  id: "crm.contact_tags.add",
+export const contactTagAssignmentsAdd = {
+  id: "crm.contact_tag_assignments.add",
   method: "PUT",
   path: "/v1/contacts/{contact_id}/tags/{tag_id}",
   positional: "tag_id",
@@ -223,8 +288,293 @@ export const contactTagsAdd = {
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-  "~types": undefined as unknown as { readonly args: [tagId: string, params: ContactTagAddParams, options?: RequestOptions]; readonly result: APIPromise<void> },
-} as const satisfies Operation<[tagId: string, params: ContactTagAddParams, options?: RequestOptions], APIPromise<void>, ContactTagAddErrorCode>;
+  "~types": undefined as unknown as { readonly args: [tagId: string, params: ContactTagAssignmentAddParams, options?: RequestOptions]; readonly result: APIPromise<void> },
+} as const satisfies Operation<[tagId: string, params: ContactTagAssignmentAddParams, options?: RequestOptions], APIPromise<void>, ContactTagAssignmentAddErrorCode>;
+
+export type ContactTagAssignmentBatchAddParams = {
+  /**
+   * Outlet the request acts in. It must be an outlet the credential may use; omit it to use every such outlet.
+   */
+  outlet_id?: string;
+} & ({
+  /**
+   * The items to write; all commit or none does. Results and item errors use their index.
+   */
+  items: T.BatchAddContactTagAssignmentItem[] | null;
+});
+export type ContactTagAssignmentBatchAddResponse = {
+  /**
+   * One result per submitted item in input order.
+   */
+  results: T.ContactTagAddResult[];
+};
+export type ContactTagAssignmentBatchAddErrorCode =
+  | DelegatedAccessErrorCode
+  | "BAD_REQUEST"
+  | "BATCH_REJECTED"
+  | "CLIENT_UPGRADE_REQUIRED"
+  | "CONFLICT"
+  | "CRM_CONTACT_NOT_FOUND"
+  | "CRM_CONTACT_TAG_NOT_FOUND"
+  | "FORBIDDEN"
+  | "IDEMPOTENCY_KEY_CONFLICT"
+  | "IDEMPOTENCY_KEY_REQUIRED"
+  | "INTERNAL_ERROR"
+  | "UNAUTHORIZED"
+  | "VALIDATION_FAILED";
+/** Codes of the items a crm.contact_tag_assignments.batch_add BATCH_REJECTED lists by index. */
+export type ContactTagAssignmentBatchAddItemErrorCode = "CRM_CONTACT_NOT_FOUND" | "CRM_CONTACT_TAG_NOT_FOUND" | "FORBIDDEN" | "VALIDATION_FAILED";
+export const contactTagAssignmentsBatchAdd = {
+  id: "crm.contact_tag_assignments.batch_add",
+  method: "POST",
+  path: "/v1/contact-tag-assignments/batch-add",
+  parameters: [
+    { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
+  ],
+  body: "required",
+  success: { status: 200, body: "json", required: ["results", "status"] },
+  result: { kind: "object" },
+  idempotency: "keyed",
+  batch: { verb: "add", maxItems: 100, itemErrors: ["CRM_CONTACT_NOT_FOUND", "CRM_CONTACT_TAG_NOT_FOUND", "FORBIDDEN", "VALIDATION_FAILED"] },
+  authentication: "required",
+  organizationKeys: true,
+  errors: [
+    ...delegatedAccessCodes,
+    "BAD_REQUEST",
+    "BATCH_REJECTED",
+    "CLIENT_UPGRADE_REQUIRED",
+    "CONFLICT",
+    "CRM_CONTACT_NOT_FOUND",
+    "CRM_CONTACT_TAG_NOT_FOUND",
+    "FORBIDDEN",
+    "IDEMPOTENCY_KEY_CONFLICT",
+    "IDEMPOTENCY_KEY_REQUIRED",
+    "INTERNAL_ERROR",
+    "UNAUTHORIZED",
+    "VALIDATION_FAILED",
+  ],
+  "~types": undefined as unknown as { readonly args: [params: ContactTagAssignmentBatchAddParams, options?: KeyedRequestOptions]; readonly result: APIPromise<ContactTagAssignmentBatchAddResponse> },
+} as const satisfies Operation<[params: ContactTagAssignmentBatchAddParams, options?: KeyedRequestOptions], APIPromise<ContactTagAssignmentBatchAddResponse>, ContactTagAssignmentBatchAddErrorCode>;
+
+export type ContactTagAssignmentBatchRemoveParams = {
+  /**
+   * Outlet the request acts in. It must be an outlet the credential may use; omit it to use every such outlet.
+   */
+  outlet_id?: string;
+} & ({
+  /**
+   * The items to write; all commit or none does. Results and item errors use their index.
+   */
+  items: T.BatchRemoveContactTagAssignmentItem[] | null;
+});
+export type ContactTagAssignmentBatchRemoveResponse = {
+  /**
+   * One result per submitted item in input order.
+   */
+  results: T.ContactTagRemoveResult[];
+};
+export type ContactTagAssignmentBatchRemoveErrorCode =
+  | DelegatedAccessErrorCode
+  | "BAD_REQUEST"
+  | "BATCH_REJECTED"
+  | "CLIENT_UPGRADE_REQUIRED"
+  | "CONFLICT"
+  | "CRM_CONTACT_NOT_FOUND"
+  | "CRM_CONTACT_TAG_NOT_FOUND"
+  | "FORBIDDEN"
+  | "IDEMPOTENCY_KEY_CONFLICT"
+  | "IDEMPOTENCY_KEY_REQUIRED"
+  | "INTERNAL_ERROR"
+  | "UNAUTHORIZED"
+  | "VALIDATION_FAILED";
+/** Codes of the items a crm.contact_tag_assignments.batch_remove BATCH_REJECTED lists by index. */
+export type ContactTagAssignmentBatchRemoveItemErrorCode = "CRM_CONTACT_NOT_FOUND" | "CRM_CONTACT_TAG_NOT_FOUND" | "FORBIDDEN" | "VALIDATION_FAILED";
+export const contactTagAssignmentsBatchRemove = {
+  id: "crm.contact_tag_assignments.batch_remove",
+  method: "POST",
+  path: "/v1/contact-tag-assignments/batch-remove",
+  parameters: [
+    { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
+  ],
+  body: "required",
+  success: { status: 200, body: "json", required: ["results", "status"] },
+  result: { kind: "object" },
+  idempotency: "keyed",
+  batch: { verb: "remove", maxItems: 100, itemErrors: ["CRM_CONTACT_NOT_FOUND", "CRM_CONTACT_TAG_NOT_FOUND", "FORBIDDEN", "VALIDATION_FAILED"] },
+  authentication: "required",
+  organizationKeys: true,
+  errors: [
+    ...delegatedAccessCodes,
+    "BAD_REQUEST",
+    "BATCH_REJECTED",
+    "CLIENT_UPGRADE_REQUIRED",
+    "CONFLICT",
+    "CRM_CONTACT_NOT_FOUND",
+    "CRM_CONTACT_TAG_NOT_FOUND",
+    "FORBIDDEN",
+    "IDEMPOTENCY_KEY_CONFLICT",
+    "IDEMPOTENCY_KEY_REQUIRED",
+    "INTERNAL_ERROR",
+    "UNAUTHORIZED",
+    "VALIDATION_FAILED",
+  ],
+  "~types": undefined as unknown as { readonly args: [params: ContactTagAssignmentBatchRemoveParams, options?: KeyedRequestOptions]; readonly result: APIPromise<ContactTagAssignmentBatchRemoveResponse> },
+} as const satisfies Operation<[params: ContactTagAssignmentBatchRemoveParams, options?: KeyedRequestOptions], APIPromise<ContactTagAssignmentBatchRemoveResponse>, ContactTagAssignmentBatchRemoveErrorCode>;
+
+export type ContactTagAssignmentRemoveParams = {
+  /**
+   * Contact whose membership to remove.
+   */
+  contact_id: string;
+  /**
+   * Outlet the request acts in. It must be an outlet the credential may use; omit it to use every such outlet.
+   */
+  outlet_id?: string;
+};
+export type ContactTagAssignmentRemoveErrorCode =
+  | DelegatedAccessErrorCode
+  | "BAD_REQUEST"
+  | "CLIENT_UPGRADE_REQUIRED"
+  | "CONFLICT"
+  | "CRM_CONTACT_NOT_FOUND"
+  | "CRM_CONTACT_TAG_NOT_FOUND"
+  | "FORBIDDEN"
+  | "INTERNAL_ERROR"
+  | "UNAUTHORIZED"
+  | "VALIDATION_FAILED";
+export const contactTagAssignmentsRemove = {
+  id: "crm.contact_tag_assignments.remove",
+  method: "DELETE",
+  path: "/v1/contacts/{contact_id}/tags/{tag_id}",
+  positional: "tag_id",
+  parameters: [
+    { member: "contact_id", name: "contact_id", in: "path", required: true, encoding: "scalar" },
+    { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
+  ],
+  body: "none",
+  success: { status: 204, body: "none", required: [] },
+  result: { kind: "void" },
+  idempotency: "safe",
+  authentication: "required",
+  organizationKeys: true,
+  errors: [
+    ...delegatedAccessCodes,
+    "BAD_REQUEST",
+    "CLIENT_UPGRADE_REQUIRED",
+    "CONFLICT",
+    "CRM_CONTACT_NOT_FOUND",
+    "CRM_CONTACT_TAG_NOT_FOUND",
+    "FORBIDDEN",
+    "INTERNAL_ERROR",
+    "UNAUTHORIZED",
+    "VALIDATION_FAILED",
+  ],
+  "~types": undefined as unknown as { readonly args: [tagId: string, params: ContactTagAssignmentRemoveParams, options?: RequestOptions]; readonly result: APIPromise<void> },
+} as const satisfies Operation<[tagId: string, params: ContactTagAssignmentRemoveParams, options?: RequestOptions], APIPromise<void>, ContactTagAssignmentRemoveErrorCode>;
+
+export type ContactTagBatchCreateParams = ({
+  /**
+   * The items to write; all commit or none does. Results and item errors use their index.
+   */
+  items: T.BatchCreateContactTagItem[] | null;
+});
+export type ContactTagBatchCreateResponse = {
+  /**
+   * One result per submitted item in input order.
+   */
+  results: T.KeyedAcknowledgment[];
+};
+export type ContactTagBatchCreateErrorCode =
+  | DelegatedAccessErrorCode
+  | "BAD_REQUEST"
+  | "BATCH_REJECTED"
+  | "CLIENT_UPGRADE_REQUIRED"
+  | "CONFLICT"
+  | "CRM_CONTACT_TAG_NOT_FOUND"
+  | "FORBIDDEN"
+  | "IDEMPOTENCY_KEY_CONFLICT"
+  | "IDEMPOTENCY_KEY_REQUIRED"
+  | "INTERNAL_ERROR"
+  | "UNAUTHORIZED"
+  | "VALIDATION_FAILED";
+/** Codes of the items a crm.contact_tags.batch_create BATCH_REJECTED lists by index. */
+export type ContactTagBatchCreateItemErrorCode = "CRM_CONTACT_TAG_ALREADY_EXISTS" | "FORBIDDEN" | "VALIDATION_FAILED";
+export const contactTagsBatchCreate = {
+  id: "crm.contact_tags.batch_create",
+  method: "POST",
+  path: "/v1/contact-tags/batch-create",
+  parameters: [],
+  body: "required",
+  success: { status: 200, body: "json", required: ["results", "status"] },
+  result: { kind: "object" },
+  idempotency: "keyed",
+  batch: { verb: "create", maxItems: 100, itemErrors: ["CRM_CONTACT_TAG_ALREADY_EXISTS", "FORBIDDEN", "VALIDATION_FAILED"] },
+  authentication: "required",
+  organizationKeys: true,
+  errors: [
+    ...delegatedAccessCodes,
+    "BAD_REQUEST",
+    "BATCH_REJECTED",
+    "CLIENT_UPGRADE_REQUIRED",
+    "CONFLICT",
+    "CRM_CONTACT_TAG_NOT_FOUND",
+    "FORBIDDEN",
+    "IDEMPOTENCY_KEY_CONFLICT",
+    "IDEMPOTENCY_KEY_REQUIRED",
+    "INTERNAL_ERROR",
+    "UNAUTHORIZED",
+    "VALIDATION_FAILED",
+  ],
+  "~types": undefined as unknown as { readonly args: [params: ContactTagBatchCreateParams, options?: KeyedRequestOptions]; readonly result: APIPromise<ContactTagBatchCreateResponse> },
+} as const satisfies Operation<[params: ContactTagBatchCreateParams, options?: KeyedRequestOptions], APIPromise<ContactTagBatchCreateResponse>, ContactTagBatchCreateErrorCode>;
+
+export type ContactTagCreateParams = T.CreateContactTagParam;
+export type ContactTagCreateResponse = {
+  /**
+   * Identifier of the affected resource.
+   */
+  id: string;
+};
+export type ContactTagCreateErrorCode =
+  | DelegatedAccessErrorCode
+  | "BAD_REQUEST"
+  | "CLIENT_UPGRADE_REQUIRED"
+  | "CONFLICT"
+  | "CRM_CONTACT_TAG_ALREADY_EXISTS"
+  | "CRM_CONTACT_TAG_NOT_FOUND"
+  | "FORBIDDEN"
+  | "IDEMPOTENCY_KEY_CONFLICT"
+  | "IDEMPOTENCY_KEY_REQUIRED"
+  | "INTERNAL_ERROR"
+  | "UNAUTHORIZED"
+  | "VALIDATION_FAILED";
+export const contactTagsCreate = {
+  id: "crm.contact_tags.create",
+  method: "POST",
+  path: "/v1/contact-tags",
+  parameters: [],
+  body: "required",
+  success: { status: 201, body: "json", required: ["id", "status"] },
+  result: { kind: "object" },
+  idempotency: "keyed",
+  authentication: "required",
+  organizationKeys: true,
+  errors: [
+    ...delegatedAccessCodes,
+    "BAD_REQUEST",
+    "CLIENT_UPGRADE_REQUIRED",
+    "CONFLICT",
+    "CRM_CONTACT_TAG_ALREADY_EXISTS",
+    "CRM_CONTACT_TAG_NOT_FOUND",
+    "FORBIDDEN",
+    "IDEMPOTENCY_KEY_CONFLICT",
+    "IDEMPOTENCY_KEY_REQUIRED",
+    "INTERNAL_ERROR",
+    "UNAUTHORIZED",
+    "VALIDATION_FAILED",
+  ],
+  "~types": undefined as unknown as { readonly args: [params: ContactTagCreateParams, options?: KeyedRequestOptions]; readonly result: APIPromise<ContactTagCreateResponse> },
+} as const satisfies Operation<[params: ContactTagCreateParams, options?: KeyedRequestOptions], APIPromise<ContactTagCreateResponse>, ContactTagCreateErrorCode>;
 
 export type ContactTagListParams = {
   /**
@@ -330,56 +680,72 @@ export const contactTagsList = {
   "~types": undefined as unknown as { readonly args: [params?: ContactTagListParams, options?: RequestOptions]; readonly result: PagePromise<T.ContactTag> },
 } as const satisfies Operation<[params?: ContactTagListParams, options?: RequestOptions], PagePromise<T.ContactTag>, ContactTagListErrorCode>;
 
-export type ContactTagRemoveParams = {
-  /**
-   * Contact whose membership to remove.
-   */
-  contact_id: string;
+export type ContactBatchCreateParams = {
   /**
    * Outlet the request acts in. It must be an outlet the credential may use; omit it to use every such outlet.
    */
   outlet_id?: string;
+} & ({
+  /**
+   * The items to write; all commit or none does. Results and item errors use their index.
+   */
+  items: T.BatchCreateContactItem[] | null;
+});
+export type ContactBatchCreateResponse = {
+  /**
+   * One result per submitted item in input order.
+   */
+  results: T.KeyedAcknowledgment[];
 };
-export type ContactTagRemoveErrorCode =
+export type ContactBatchCreateErrorCode =
   | DelegatedAccessErrorCode
   | "BAD_REQUEST"
+  | "BATCH_REJECTED"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
+  | "CRM_CONTACT_MASTER_OUTLET_MISSING"
   | "CRM_CONTACT_NOT_FOUND"
-  | "CRM_CONTACT_TAG_NOT_FOUND"
+  | "CRM_CONTACT_OUTLET_REQUIRED"
   | "FORBIDDEN"
+  | "IDEMPOTENCY_KEY_CONFLICT"
+  | "IDEMPOTENCY_KEY_REQUIRED"
   | "INTERNAL_ERROR"
   | "UNAUTHORIZED"
   | "VALIDATION_FAILED";
-export const contactTagsRemove = {
-  id: "crm.contact_tags.remove",
-  method: "DELETE",
-  path: "/v1/contacts/{contact_id}/tags/{tag_id}",
-  positional: "tag_id",
+/** Codes of the items a crm.contacts.batch_create BATCH_REJECTED lists by index. */
+export type ContactBatchCreateItemErrorCode = "CRM_CONTACT_CHILD_KIND_MISMATCH" | "CRM_CONTACT_NOT_FOUND" | "CRM_CONTACT_PHONE_OCCUPIED" | "CRM_CONTACT_TAG_NOT_FOUND" | "FORBIDDEN" | "VALIDATION_FAILED";
+export const contactsBatchCreate = {
+  id: "crm.contacts.batch_create",
+  method: "POST",
+  path: "/v1/contacts/batch-create",
   parameters: [
-    { member: "contact_id", name: "contact_id", in: "path", required: true, encoding: "scalar" },
     { member: "outlet_id", name: "outlet_id", in: "query", required: false, encoding: "scalar" },
   ],
-  body: "none",
-  success: { status: 204, body: "none", required: [] },
-  result: { kind: "void" },
-  idempotency: "safe",
+  body: "required",
+  success: { status: 200, body: "json", required: ["results", "status"] },
+  result: { kind: "object" },
+  idempotency: "keyed",
+  batch: { verb: "create", maxItems: 100, itemErrors: ["CRM_CONTACT_CHILD_KIND_MISMATCH", "CRM_CONTACT_NOT_FOUND", "CRM_CONTACT_PHONE_OCCUPIED", "CRM_CONTACT_TAG_NOT_FOUND", "FORBIDDEN", "VALIDATION_FAILED"] },
   authentication: "required",
   organizationKeys: true,
   errors: [
     ...delegatedAccessCodes,
     "BAD_REQUEST",
+    "BATCH_REJECTED",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
+    "CRM_CONTACT_MASTER_OUTLET_MISSING",
     "CRM_CONTACT_NOT_FOUND",
-    "CRM_CONTACT_TAG_NOT_FOUND",
+    "CRM_CONTACT_OUTLET_REQUIRED",
     "FORBIDDEN",
+    "IDEMPOTENCY_KEY_CONFLICT",
+    "IDEMPOTENCY_KEY_REQUIRED",
     "INTERNAL_ERROR",
     "UNAUTHORIZED",
     "VALIDATION_FAILED",
   ],
-  "~types": undefined as unknown as { readonly args: [tagId: string, params: ContactTagRemoveParams, options?: RequestOptions]; readonly result: APIPromise<void> },
-} as const satisfies Operation<[tagId: string, params: ContactTagRemoveParams, options?: RequestOptions], APIPromise<void>, ContactTagRemoveErrorCode>;
+  "~types": undefined as unknown as { readonly args: [params: ContactBatchCreateParams, options?: KeyedRequestOptions]; readonly result: APIPromise<ContactBatchCreateResponse> },
+} as const satisfies Operation<[params: ContactBatchCreateParams, options?: KeyedRequestOptions], APIPromise<ContactBatchCreateResponse>, ContactBatchCreateErrorCode>;
 
 export type ContactCreateParams = {
   /**
@@ -398,11 +764,13 @@ export type ContactCreateErrorCode =
   | "BAD_REQUEST"
   | "CLIENT_UPGRADE_REQUIRED"
   | "CONFLICT"
+  | "CRM_CONTACT_CHILD_KIND_MISMATCH"
   | "CRM_CONTACT_EMAIL_OCCUPIED"
   | "CRM_CONTACT_MASTER_OUTLET_MISSING"
   | "CRM_CONTACT_NOT_FOUND"
   | "CRM_CONTACT_OUTLET_REQUIRED"
   | "CRM_CONTACT_PHONE_OCCUPIED"
+  | "CRM_CONTACT_TAG_NOT_FOUND"
   | "FORBIDDEN"
   | "IDEMPOTENCY_KEY_CONFLICT"
   | "IDEMPOTENCY_KEY_REQUIRED"
@@ -427,11 +795,13 @@ export const contactsCreate = {
     "BAD_REQUEST",
     "CLIENT_UPGRADE_REQUIRED",
     "CONFLICT",
+    "CRM_CONTACT_CHILD_KIND_MISMATCH",
     "CRM_CONTACT_EMAIL_OCCUPIED",
     "CRM_CONTACT_MASTER_OUTLET_MISSING",
     "CRM_CONTACT_NOT_FOUND",
     "CRM_CONTACT_OUTLET_REQUIRED",
     "CRM_CONTACT_PHONE_OCCUPIED",
+    "CRM_CONTACT_TAG_NOT_FOUND",
     "FORBIDDEN",
     "IDEMPOTENCY_KEY_CONFLICT",
     "IDEMPOTENCY_KEY_REQUIRED",

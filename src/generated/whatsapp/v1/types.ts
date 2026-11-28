@@ -1553,7 +1553,7 @@ export interface CreateBroadcastParam {
   send_window?: SendWindow | null;
   /**
    * Up to 20 sender agents. Setting them, start and resume require
-   * whatsapp.message.create on every sender.
+   * whatsapp.message.send on every sender.
    */
   sender_agent_ids?: string[] | null;
   /**
@@ -1590,7 +1590,7 @@ export type CreateMessageParam = {
   /**
    * Makes a text or template send a reply quoting that chat message (a
    * direct chat only); quoting a received message also requires
-   * whatsapp.inbound.read.
+   * whatsapp.chat.read.
    */
   reply_to_id?: string;
   revoke?: MessageRevoke | null;
@@ -1633,7 +1633,7 @@ export type CreateMessageParam = {
   /**
    * Makes a text or template send a reply quoting that chat message (a
    * direct chat only); quoting a received message also requires
-   * whatsapp.inbound.read.
+   * whatsapp.chat.read.
    */
   reply_to_id?: string;
   revoke?: unknown;
@@ -1676,7 +1676,7 @@ export type CreateMessageParam = {
   /**
    * Makes a text or template send a reply quoting that chat message (a
    * direct chat only); quoting a received message also requires
-   * whatsapp.inbound.read.
+   * whatsapp.chat.read.
    */
   reply_to_id?: string;
   revoke?: unknown;
@@ -1719,7 +1719,7 @@ export type CreateMessageParam = {
   /**
    * Makes a text or template send a reply quoting that chat message (a
    * direct chat only); quoting a received message also requires
-   * whatsapp.inbound.read.
+   * whatsapp.chat.read.
    */
   reply_to_id?: string;
   revoke: MessageRevoke;
@@ -1762,7 +1762,7 @@ export type CreateMessageParam = {
   /**
    * Makes a text or template send a reply quoting that chat message (a
    * direct chat only); quoting a received message also requires
-   * whatsapp.inbound.read.
+   * whatsapp.chat.read.
    */
   reply_to_id?: string;
   revoke?: unknown;
@@ -1805,7 +1805,7 @@ export type CreateMessageParam = {
   /**
    * Makes a text or template send a reply quoting that chat message (a
    * direct chat only); quoting a received message also requires
-   * whatsapp.inbound.read.
+   * whatsapp.chat.read.
    */
   reply_to_id?: string;
   revoke?: unknown;
@@ -2076,7 +2076,7 @@ export interface MessageReaction {
   /**
    * ID of the chat message to react to. A message sent through the API
    * can be identified by its message ID. Reacting to a received message
-   * requires `whatsapp.inbound.read`.
+   * requires `whatsapp.chat.read`.
    */
   target_id: string;
 }
@@ -2637,7 +2637,7 @@ export interface UpdateBroadcastParam {
   priority_offset?: number;
   send_window?: SendWindow | null;
   /**
-   * New sender agents, up to 20; replaces the list. Requires whatsapp.message.create on every sender.
+   * New sender agents, up to 20; replaces the list. Requires whatsapp.message.send on every sender.
    */
   sender_agent_ids?: string[] | null;
   /**

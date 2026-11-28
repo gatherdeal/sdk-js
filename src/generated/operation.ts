@@ -79,6 +79,8 @@ export interface Operation<Args extends readonly unknown[] = readonly unknown[],
     | { readonly kind: "page"; readonly key: string; readonly pagination: Pagination }
     | { readonly kind: "object" };
   readonly idempotency: "safe" | "keyed" | "none";
+  /** Atomic batch write: chunk by maxItems; a BATCH_REJECTED lists items with these codes by index. */
+  readonly batch?: { readonly verb: string; readonly maxItems: number; readonly itemErrors: readonly string[] };
   readonly conditional?: { readonly read: string };
   readonly authentication: "required" | "optional";
   readonly organizationKeys: boolean;
