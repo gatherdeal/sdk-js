@@ -105,7 +105,7 @@ export const operations = {
     /**
      * Create a broadcast.
      *
-     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.create`.
+     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.send`.
      */
     create: op.broadcastsCreate,
     /**
@@ -161,7 +161,7 @@ export const operations = {
      *
      * Resumes a paused broadcast; it becomes scheduled or running again. A sender that is no longer usable is marked lost.
      *
-     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.create`.
+     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.send`.
      */
     resume: op.broadcastsResume,
     /**
@@ -169,13 +169,13 @@ export const operations = {
      *
      * Starts a draft broadcast: it becomes scheduled until not_before, then running. Content, senders and recipients cannot change afterwards.
      *
-     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.create`.
+     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.send`.
      */
     start: op.broadcastsStart,
     /**
      * Update a broadcast.
      *
-     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.create`.
+     * Requires the permissions `whatsapp.broadcast.write`, `whatsapp.message.send`.
      */
     update: op.broadcastsUpdate,
   },
@@ -183,13 +183,13 @@ export const operations = {
     /**
      * Get a chat message.
      *
-     * Requires one of the permissions `whatsapp.inbound.read`, `whatsapp.message.read`.
+     * Requires one of the permissions `whatsapp.chat.read`, `whatsapp.message.read`.
      */
     get: op.chatMessagesGet,
     /**
      * List chat message feeds.
      *
-     * Requires one of the permissions `whatsapp.inbound.read`, `whatsapp.message.read`.
+     * Requires one of the permissions `whatsapp.chat.read`, `whatsapp.message.read`.
      */
     list: op.chatMessagesList,
   },
@@ -197,13 +197,13 @@ export const operations = {
     /**
      * Get a chat.
      *
-     * Requires the permissions `whatsapp.inbound.read`.
+     * Requires the permissions `whatsapp.chat.read`.
      */
     get: op.chatsGet,
     /**
      * List chats.
      *
-     * Requires the permissions `whatsapp.inbound.read`.
+     * Requires the permissions `whatsapp.chat.read`.
      *
      * Use `for await` to iterate over all results.
      */
@@ -212,7 +212,7 @@ export const operations = {
       /**
        * List chat messages.
        *
-       * Requires one of the permissions `whatsapp.inbound.read`, `whatsapp.message.read`.
+       * Requires one of the permissions `whatsapp.chat.read`, `whatsapp.message.read`.
        *
        * Use `for await` to iterate over all results.
        */
@@ -223,25 +223,25 @@ export const operations = {
     /**
      * Create a message template.
      *
-     * Requires the permissions `whatsapp.template.write`.
+     * Requires the permissions `whatsapp.message_template.write`.
      */
     create: op.messageTemplatesCreate,
     /**
      * Delete a message template.
      *
-     * Requires the permissions `whatsapp.template.delete`.
+     * Requires the permissions `whatsapp.message_template.delete`.
      */
     delete: op.messageTemplatesDelete,
     /**
      * Get a message template.
      *
-     * Requires one of the permissions `whatsapp.message.create`, `whatsapp.template.read`.
+     * Requires one of the permissions `whatsapp.message.send`, `whatsapp.message_template.read`.
      */
     get: op.messageTemplatesGet,
     /**
      * List message templates.
      *
-     * Requires one of the permissions `whatsapp.message.create`, `whatsapp.template.read`.
+     * Requires one of the permissions `whatsapp.message.send`, `whatsapp.message_template.read`.
      *
      * Use `for await` to iterate over all results.
      */
@@ -249,13 +249,13 @@ export const operations = {
     /**
      * Preview Message Template
      *
-     * Requires one of the permissions `whatsapp.message.create`, `whatsapp.template.read`.
+     * Requires one of the permissions `whatsapp.message.send`, `whatsapp.message_template.read`.
      */
     preview: op.messageTemplatesPreview,
     /**
      * Replace Message Template
      *
-     * Requires the permissions `whatsapp.template.write`.
+     * Requires the permissions `whatsapp.message_template.write`.
      */
     replace: op.messageTemplatesReplace,
   },
@@ -263,7 +263,7 @@ export const operations = {
     /**
      * Create a message.
      *
-     * Requires the permissions `whatsapp.message.create`.
+     * Requires the permissions `whatsapp.message.send`.
      */
     create: op.messagesCreate,
     /**

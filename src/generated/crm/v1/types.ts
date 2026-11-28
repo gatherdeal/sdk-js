@@ -1,5 +1,96 @@
 // Generated from the GatherDeal public API contracts. Do not edit.
 
+export interface BatchAddContactTagAssignmentItem {
+  /**
+   * Contact whose membership to change.
+   */
+  contact_id: string;
+  /**
+   * Organization tag to add or remove.
+   */
+  tag_id: string;
+}
+
+/**
+ * BatchCreateContactItem is one contact of contacts.batch_create: the single
+ * create's fields without the profile image and attributes.
+ */
+export interface BatchCreateContactItem {
+  /**
+   * Primary email address.
+   */
+  email?: string;
+  kind: ContactKindParam;
+  /**
+   * Contact display name.
+   */
+  name: string;
+  /**
+   * Primary phone number.
+   */
+  phone?: string | null;
+  /**
+   * Preferred language code.
+   */
+  preferred_language?: string;
+  /**
+   * Contact remark.
+   */
+  remark?: string;
+}
+
+/**
+ * BatchCreateContactLogItem is one note of contact_logs.batch_create: the
+ * single create's fields without attachments.
+ */
+export interface BatchCreateContactLogItem {
+  /**
+   * Contact to record the note against.
+   */
+  contact_id: string;
+  /**
+   * Nonblank note text. Whitespace in the submitted text is preserved.
+   */
+  content: string;
+}
+
+/**
+ * BatchCreateContactTagItem is one definition of contact_tags.batch_create.
+ */
+export interface BatchCreateContactTagItem {
+  /**
+   * Optional tag description.
+   */
+  description?: string;
+  /**
+   * Tag name, unique in the organization.
+   */
+  name: string;
+}
+
+/**
+ * BatchRejectedDetails are the details of BATCH_REJECTED.
+ */
+export interface BatchRejectedDetails {
+  /**
+   * Complete is true when errors lists every item the owner found failing,
+   * false when the list is partial (a write-time failure or the size
+   * budget). Every index not listed is uncommitted with validity unknown.
+   */
+  complete: boolean;
+}
+
+export interface BatchRemoveContactTagAssignmentItem {
+  /**
+   * Contact whose membership to change.
+   */
+  contact_id: string;
+  /**
+   * Organization tag to add or remove.
+   */
+  tag_id: string;
+}
+
 /**
  * ClientUpgradeRequiredDetails are the details of CLIENT_UPGRADE_REQUIRED.
  */
@@ -224,6 +315,18 @@ export interface ContactPhoneBrief {
   update_at: string;
 }
 
+/**
+ * ContactTagAddOutcome is what contact_tag_assignments.batch_add did to one pair.
+ */
+export type ContactTagAddOutcome = "added" | "unchanged" | (string & {});
+
+/**
+ * ContactTagAddResult reports one pair of contact_tag_assignments.batch_add.
+ */
+export interface ContactTagAddResult {
+  outcome: ContactTagAddOutcome;
+}
+
 export interface ContactTagAssignment {
   /**
    * When the tag was assigned.
@@ -264,6 +367,18 @@ export interface ContactTag {
    * When the tag was last updated.
    */
   update_at: string;
+}
+
+/**
+ * ContactTagRemoveOutcome is what contact_tag_assignments.batch_remove did to one pair.
+ */
+export type ContactTagRemoveOutcome = "removed" | "unchanged" | (string & {});
+
+/**
+ * ContactTagRemoveResult reports one pair of contact_tag_assignments.batch_remove.
+ */
+export interface ContactTagRemoveResult {
+  outcome: ContactTagRemoveOutcome;
 }
 
 /**
@@ -447,6 +562,17 @@ export interface CreateContactLogParam {
   content: string;
 }
 
+export interface CreateContactTagParam {
+  /**
+   * Optional tag description.
+   */
+  description?: string;
+  /**
+   * Tag name, unique in the organization.
+   */
+  name: string;
+}
+
 /**
  * The deal is homed at the selected outlet, or at the caller's only deal-write
  * outlet when none is selected.
@@ -628,6 +754,18 @@ export interface Group {
   negated?: boolean;
   quantifier?: Quantifier;
   rules?: Array<Rule | null> | null;
+}
+
+/**
+ * KeyedAcknowledgment confirms a keyed write and names the resource it
+ * affected. Retrying the write with the same idempotency key returns the same
+ * acknowledgment.
+ */
+export interface KeyedAcknowledgment {
+  /**
+   * Identifier of the affected resource.
+   */
+  id: string;
 }
 
 /**
